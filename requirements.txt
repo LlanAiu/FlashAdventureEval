@@ -149,11 +149,6 @@ PyMsgBox==1.0.9
 PyMuPDF==1.25.3
 PyNaCl==1.5.0
 pynput==1.7.7
-pyobjc-core==11.0
-pyobjc-framework-ApplicationServices==11.0
-pyobjc-framework-Cocoa==11.0
-pyobjc-framework-CoreText==11.0
-pyobjc-framework-Quartz==11.0
 pyparsing==3.2.1
 pypdf==5.3.0
 PyPDF2==3.0.1
