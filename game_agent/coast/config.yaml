@@ -14,8 +14,8 @@ game_prompt_path: "./json/game_prompt.json"
 # reasoning_model: "gpt-4o"
 # gui_model: "gpt_operator"  # or gpt_operator / claude_cua / uground
 
-api_provider: "anthropic"
-reasoning_model: "claude-3-7-sonnet-20250219"
+api_provider: "vllm"
+reasoning_model: "Qwen/Qwen3.6-27B"
 gui_model: "claude_cua"  # or gpt_operator / claude_cua / uground
 
 # # Tree expansion settings

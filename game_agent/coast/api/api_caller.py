@@ -1,11 +1,11 @@
-from api.serving import anthropic_completion, openai_completion, gemini_completion
+from api.serving import anthropic_completion, openai_completion, gemini_completion, vllm_completion
 
 def api_caller(api_provider, system_prompt, model_name, move_prompts, base64_images=None):
     """
     Unified API caller for multiple model providers.
     
     Parameters:
-        - api_provider (str): "anthropic", "openai", or "gemini"
+        - api_provider (str): "anthropic", "openai", "gemini", or "vllm"
         - system_prompt (str): System-level instruction
         - model_name (str): Model identifier (e.g., "gpt-4", "claude-3")
         - move_prompts (str): Main user prompt for this action
@@ -35,6 +35,9 @@ def api_caller(api_provider, system_prompt, model_name, move_prompts, base64_ima
 
     elif api_provider == "gemini":
         return gemini_completion(system_prompt, model_name, base64_images, move_prompts)
+    
+    elif api_provider == "vllm":
+        return vllm_completion(system_prompt, model_name, base64_images, move_prompts)
 
     else:
         raise NotImplementedError(f"Unsupported API provider: '{api_provider}'")

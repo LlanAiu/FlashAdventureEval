@@ -108,3 +108,42 @@ def gemini_completion(system_prompt, model_name, base64_images, prompt):
     except Exception as e:
         print(f"Error: {e}")
         return None
+
+def vllm_completion(system_prompt, model_name, base64_images, prompt):
+    client = OpenAI(
+        base_url="http://127.0.0.1:11235/v1",
+        api_key="vllm"
+    )
+    
+    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": []}]
+
+    if base64_images:
+        for base64_image in base64_images:
+            messages[1]["content"].append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{base64_image}"},
+            })
+    
+    messages[1]["content"].append({"type": "text", "text": prompt})
+    
+    try:
+        if model_name == "Qwen/Qwen3.6-27B":
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                max_completion_tokens=3000,
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                temperature=0,
+                max_tokens=1024,
+            )
+            
+        return response.choices[0].message.content
+    
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+    
