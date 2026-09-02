@@ -111,7 +111,7 @@ def gemini_completion(system_prompt, model_name, base64_images, prompt):
 
 def vllm_completion(system_prompt, model_name, base64_images, prompt):
     client = OpenAI(
-        base_url="http://127.0.0.1:11235/v1",
+        base_url=os.getenv("VLLM_BASE_URL"),
         api_key="vllm"
     )
     
