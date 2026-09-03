@@ -37,6 +37,22 @@ class SeekerBot(Agent):
                 f"[Clues]\n{json.dumps(self.clue_memory, indent=2)}\n\n"
 
             )
+        elif self.gui_model == "vllm_cua":
+            self.system_prompt = f"{self.system_prompt.strip()}\n\n{self.game_prompt.strip()}\n\n"
+            self.final_prompt = (
+                f"{self.action_prompt.strip()}\n\n"
+                "After analyzing the screen, also output a next action to progress the game.\n"
+                "Add a field 'next_action' to your JSON with one of the following forms:\n"
+                "  - {\"action\": \"click\", \"x\": 100, \"y\": 200}\n"
+                "  - {\"action\": \"double_click\", \"x\": 100, \"y\": 200}\n"
+                "  - {\"action\": \"keypress\", \"keys\": [\"enter\"]}\n"
+                "  - {\"action\": \"type\", \"text\": \"hello\"}\n"
+                "  - {\"action\": \"wait\", \"ms\": 1000}\n\n"
+                "The full JSON inside <RESPO> should contain: clues, episodic_memory, AND next_action.\n\n"
+                "Do not store the same clue more than once in memory.\n\n"
+                f"[Clues]\n{json.dumps(self.clue_memory, indent=2)}\n\n"
+
+            )
         else:
             self.final_prompt = (
                 f"{self.system_prompt.strip()}\n\n"
@@ -223,6 +239,20 @@ class SolverBot(Agent):
             self.system_prompt = f"{self.system_prompt.strip()}\n\n{self.game_prompt.strip()}\n\n"
             self.final_prompt = (
                 f"{self.action_prompt.strip()}\n\n"
+                f"{self.mapping if self.mapping else ''}"
+            )
+        elif self.gui_model == "vllm_cua":
+            self.system_prompt = f"{self.system_prompt.strip()}\n\n{self.game_prompt.strip()}\n\n"
+            self.final_prompt = (
+                f"{self.action_prompt.strip()}\n\n"
+                "After analyzing the screen and solving problems, also output a next action to progress the game.\n"
+                "Add a field 'next_action' to your JSON with one of the following forms:\n"
+                "  - {\"action\": \"click\", \"x\": 100, \"y\": 200}\n"
+                "  - {\"action\": \"double_click\", \"x\": 100, \"y\": 200}\n"
+                "  - {\"action\": \"keypress\", \"keys\": [\"enter\"]}\n"
+                "  - {\"action\": \"type\", \"text\": \"hello\"}\n"
+                "  - {\"action\": \"wait\", \"ms\": 1000}\n\n"
+                "The full JSON inside <RESPO> should contain: episodic_memory, mapping_result, result, AND next_action.\n\n"
                 f"{self.mapping if self.mapping else ''}"
             )
         else:
