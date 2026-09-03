@@ -162,6 +162,7 @@ def main_vllm_cua(
             print(f"[ERROR] API call failed: {e}")
             break
 
+        print(f"Got response: {resp}")
         raw = resp.choices[0].message.content.strip()
         print(f"  [RAW] {raw[:200]}")
 
