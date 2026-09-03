@@ -23,6 +23,7 @@ class LocalDesktopComputer(Computer):
         self._action_count = 0
         self._max_actions = max_actions
         self._countable = ["click", "double_click", "scroll", "type", "keypress", "drag"]
+        self._screenshot_count = 0
 
     @property
     def environment(self) -> Literal["windows", "mac", "linux"]:
@@ -52,6 +53,15 @@ class LocalDesktopComputer(Computer):
                 img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
         else:
             img = pyautogui.screenshot()
+
+        if os.environ.get("DEBUG_SAVE_SCREENSHOTS", "").lower() in ("1", "true", "yes"):
+            self._screenshot_count += 1
+            out_dir = os.environ.get("SCREENSHOT_DIR", "./screenshots")
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, f"screenshot_{self._screenshot_count:04d}.png")
+            img.save(path)
+            print(f"Debug screenshot saved: {path}")
+
         buffer = BytesIO()
         img.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
