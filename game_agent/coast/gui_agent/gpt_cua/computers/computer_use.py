@@ -1,9 +1,11 @@
+import os
 import platform
 import time
 import base64
 from typing import List, Dict, Literal
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
+import mss
 import pyautogui
 from .computer import Computer
 
@@ -44,7 +46,12 @@ class LocalDesktopComputer(Computer):
             print(f"⬆️ 액션 카운터 증가: {self._action_count}/{self._max_actions}")
 
     def screenshot(self) -> str:
-        img = pyautogui.screenshot()
+        if os.environ.get("HEADLESS", "").lower() in ("1", "true", "yes"):
+            with mss.mss() as sct:
+                screenshot = sct.grab(sct.monitors[1])  # primary display
+                img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+        else:
+            img = pyautogui.screenshot()
         buffer = BytesIO()
         img.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
