@@ -65,3 +65,5 @@ logs/
 .env
 *.env
 **/.env
+
+**/agent_log.txt
