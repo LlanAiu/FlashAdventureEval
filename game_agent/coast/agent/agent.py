@@ -132,7 +132,7 @@ class Agent:
 
         result = action_Agent(
             action_prompt=self.final_prompt,
-            system_prompt=self.system_prompt if self.gui_model == "claude_cua" else None,
+            system_prompt=self.system_prompt if self.gui_model in ("claude_cua", "vllm_cua") else None,
             encoded_image=self.image,
             gui_model=self.gui_model,
             reasoning_model=self.reasoning_model,
