@@ -17,11 +17,16 @@ RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-in
     php-cli \
     # Qt xcb plugin dependency (needed by clifp-c) \
     libxcb-cursor0 \
+    # xkbcommon X11 backend (needed by clifp-c)
+    libxkbcommon-x11-0 \
+    # xcb ICCCM (needed by clifp-c)
+    libxcb-icccm1 \
     # Build tools needed by some Python packages \
     gcc \
     g++ \
     # Misc utilities \
     procps \
+    python3-tk \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Environment defaults ────────────────────────────────────────────
