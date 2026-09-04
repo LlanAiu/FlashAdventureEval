@@ -97,12 +97,15 @@ def run_solver(config_path, game_name, failed_mappings, total_actions, max_actio
     return solver_total
 
 
-def main(config_path="config.yaml", games_path="./json/game_prompt.json"):
+def main(config_path="config.yaml", games_path="./json/game_prompt.json", game_name_arg=None):
     config = load_config(config_path)
     max_actions = config.get("max_action_count", 50)
 
     game_dict = load_game_metadata(games_path)
-    game_name = choose_game(game_dict)
+    if game_name_arg:
+        game_name = game_name_arg
+    else:
+        game_name = choose_game(game_dict)
     print(f"\n🎯 Selected Game: {game_name}")
 
     MAX_ITER = 10
@@ -175,6 +178,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Clue→Map→Solve pipeline for selected game")
     parser.add_argument("--config", type=str, default="config.yaml", help="Path to config.yaml")
     parser.add_argument("--games", type=str, default="games.json", help="Path to games.json")
+    parser.add_argument("--game", type=str, default=None, help="Game name (skips interactive selection)")
     args = parser.parse_args()
 
-    main(config_path=args.config)
+    main(config_path=args.config, games_path="./json/game_prompt.json", game_name_arg=args.game)

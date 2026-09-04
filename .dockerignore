@@ -1,0 +1,25 @@
+# Large directories
+screenshots/
+screenshots_after/
+screenshots_final/
+output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env.backup
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
