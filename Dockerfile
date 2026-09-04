@@ -13,14 +13,30 @@ RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-in
     # Wine for FlashPlayer (32-bit required by flashplayer_32_sa.exe) \
     wine \
     wine32:i386 \
-    # PHP-cli for Flashpoint's local web server \
+    wine64 \
     php-cli \
-    # Qt xcb plugin dependency (needed by clifp-c) \
-    libxcb-cursor0 \
-    # xkbcommon X11 backend (needed by clifp-c)
-    libxkbcommon-x11-0 \
-    # xcb ICCCM (needed by clifp-c)
-    libxcb-icccm1 \
+    # xcb libraries (all needed by clifp-c / Qt XCB platform plugin)
+    libxcb1 libxcb-cursor0 libxcb-glx0 libxcb-icccm4 libxcb-image0 \
+    libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-render-util0 \
+    libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 \
+    libxcb-util1 \
+    # xkbcommon
+    libxkbcommon-x11-0 libxkbcommon0 \
+    # wayland (needed by clifp-c)
+    libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+    # OpenGL / EGL / GLX (needed by clifp-c)
+    libegl1 libglx0 libopengl0 libglvnd0 \
+    # X11 extras
+    libx11-6 libx11-xcb1 libxau6 libxdmcp6 \
+    # X11 session management (needed by clifp-c)
+    libsm6 libice6 \
+    # D-Bus (needed by clifp-c / Qt)
+    libdbus-1-3 \
+    # Additional runtime deps from ldd of clifp-c
+    libblkid1 libbrotli1 libbsd0 libcap2 libdrm2 libexpat1 libffi8 \
+    libfontconfig1 libfreetype6 libgcrypt20 libglib2.0-0 libgraphite2-3 \
+    libharfbuzz0b liblz4-1 libmd0 libmount1 libpcre2-16-0 libpcre2-8-0 \
+    libpng16-16 libselinux1 libsystemd0 libuuid1 libzstd1 \
     # Build tools needed by some Python packages \
     gcc \
     g++ \

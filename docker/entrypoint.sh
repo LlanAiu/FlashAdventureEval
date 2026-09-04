@@ -7,6 +7,7 @@ export DISPLAY=":${DISPLAY_NUM}"
 XVFB_RESOLUTION="${XVFB_RESOLUTION:-1280x1024x24}"
 FLASHPOINT_DIR="${FLASHPOINT_DIR:-/flashpoint}"
 GAME_NAME="${GAME_NAME:?GAME_NAME must be set (e.g. 'Crimson Room')}"
+GAME_UUID="${GAME_UUID:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 CLIFP_C="${FLASHPOINT_DIR}/CLIFp/bin/clifp-c"
 
@@ -26,16 +27,39 @@ if ! kill -0 "$XVFB_PID" 2>/dev/null; then
 fi
 log "Xvfb started (PID ${XVFB_PID})"
 
+# ── Step 1.5: Clean up any leftover FlashPoint servers ──────────────
+# clifp-c uses a PHP server on port 22600 which can linger from prior runs
+log "Cleaning up any leftover FlashPoint processes..."
+pkill -f "php.*router.php" 2>/dev/null || true
+pkill -f "FlashpointGameServer" 2>/dev/null || true
+sleep 1
+
+# ── Step 1.6: Fix Wine prefix ownership ──────────────────────────────
+# FlashPoint's Wine prefix is owned by the host user but the container runs
+# as root. Wine refuses to use a prefix owned by a different UID.
+log "Fixing Wine prefix ownership..."
+if [[ -d "${FLASHPOINT_DIR}/FPSoftware/Wine" ]]; then
+    chown -R root:root "${FLASHPOINT_DIR}/FPSoftware/Wine"
+fi
+
 # ── Step 2: Launch game via clifp-c ─────────────────────────────────
 log "Launching '${GAME_NAME}' via clifp-c..."
 
-# clifp-c play -t "<GAME NAME>" handles:
+# Use UUID (-i) if provided, otherwise fall back to title (-t)
+if [[ -n "${GAME_UUID}" ]]; then
+    log "Using game UUID: ${GAME_UUID}"
+    CLIFP_CMD=("${CLIFP_C}" play -i "${GAME_UUID}")
+else
+    CLIFP_CMD=("${CLIFP_C}" play -t "${GAME_NAME}")
+fi
+
+# clifp-c play handles:
 #   - Starting the FlashPoint game server
 #   - Mounting the game zip
 #   - Launching flashplayer via Wine
 # It blocks until the game exits, so we run it in the background.
 cd "$FLASHPOINT_DIR"
-"${CLIFP_C}" play -t "${GAME_NAME}" &
+"${CLIFP_CMD[@]}" &
 CLIFP_PID=$!
 log "clifp-c started (PID ${CLIFP_PID})"
 

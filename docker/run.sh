@@ -5,6 +5,7 @@ set -euo pipefail
 # ./docker/run.sh build                        — build the image
 # ./docker/run.sh run "Crimson Room"           — run the agent against a game
 # ./docker/run.sh run "Crimson Room" --attach  — run with interactive terminal
+# ./docker/run.sh run "Crimson Room" --uuid <UUID>  — use exact game UUID
 
 IMAGE_NAME="flashadventure"
 IMAGE_TAG="latest"
@@ -41,11 +42,18 @@ case "$1" in
 
         # Optional --attach flag for interactive debugging
         ATTACH=""
+        GAME_UUID=""
         if [[ "${3:-}" == "--attach" ]]; then
             ATTACH="-it"
         fi
+        if [[ "${3:-}" == "--uuid" ]]; then
+            GAME_UUID="$4"
+        fi
 
         echo "Running ${IMAGE_NAME}:${IMAGE_TAG} with GAME_NAME='${GAME_NAME}'"
+        if [[ -n "${GAME_UUID}" ]]; then
+            echo "  Game UUID:  ${GAME_UUID}"
+        fi
         echo "  FlashPoint: ${FLASHPOINT_DIR}"
         echo "  Output:     ${OUTPUT_DIR}"
         echo ""
@@ -55,11 +63,12 @@ case "$1" in
         docker run --rm ${ATTACH} \
             -e DISPLAY_NUM=99 \
             -e GAME_NAME="${GAME_NAME}" \
+            -e GAME_UUID="${GAME_UUID}" \
             -e FLASHPOINT_DIR=/flashpoint \
             -e OUTPUT_DIR=/output \
             -e HEADLESS=true \
             -e WINEDEBUG=-all \
-            -v "${FLASHPOINT_DIR}:/flashpoint:ro" \
+            -v "${FLASHPOINT_DIR}:/flashpoint" \
             -v "${PROJECT_DIR}/game_agent:/app/game_agent" \
             -v "${PROJECT_DIR}/evaluator:/app/evaluator" \
             -v "${PROJECT_DIR}/.env:/app/.env" \
