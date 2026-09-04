@@ -84,13 +84,43 @@ log "Focusing game window..."
 DISPLAY=":${DISPLAY_NUM}" xdotool search --name "Flash" windowactivate --sync --window %@ 2>/dev/null || true
 sleep 1
 
-# Take a diagnostic screenshot
+# Take a diagnostic screenshot (cropped to game window if possible)
 log "Taking diagnostic screenshot..."
-DISPLAY=":${DISPLAY_NUM}" python3 -c "
-import mss
+DISPLAY=":${DISPLAY_NUM}" python3 << PYEOF
+import mss, subprocess
+from PIL import Image
+
 with mss.mss() as sct:
-    sct.shot(output='${OUTPUT_DIR}/diagnostic_before_agent.png')
-" 2>/dev/null || true
+    mon = sct.monitors[1]
+    shot = sct.grab(mon)
+    img = Image.frombytes("RGB", shot.size, shot.rgb)
+
+# Try to find the Flash window and crop to it
+try:
+    r = subprocess.run(["xdotool", "search", "--name", "Flash", "getwindowgeometry", "--shell", "%1"],
+                       capture_output=True, text=True, timeout=5)
+    if r.returncode != 0:
+        w = subprocess.run(["xdotool", "search", "--name", "Flash"],
+                           capture_output=True, text=True, timeout=5)
+        if w.returncode == 0 and w.stdout.strip():
+            wid = w.stdout.strip().split("\n")[0]
+            r = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid],
+                               capture_output=True, text=True, timeout=5)
+    if r.returncode == 0:
+        v = {}
+        for line in r.stdout.strip().split("\n"):
+            if "=" in line:
+                k, val = line.split("=", 1)
+                v[k.strip()] = int(val.strip())
+        x, y = v.get("X", 0), v.get("Y", 0)
+        w, h = v.get("WIDTH", 0), v.get("HEIGHT", 0)
+        img = img.crop((x, y, x + w, y + h))
+        print(f"Cropped to game window: {x},{y} {w}x{h}")
+except Exception as e:
+    print(f"Could not crop: {e}")
+
+img.save("${OUTPUT_DIR}/diagnostic_before_agent.png")
+PYEOF
 
 # ── Step 4: Run the agent ───────────────────────────────────────────
 log "Starting agent for game '${GAME_NAME}'..."

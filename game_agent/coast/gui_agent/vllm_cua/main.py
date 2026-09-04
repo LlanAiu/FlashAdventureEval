@@ -92,6 +92,8 @@ def main_vllm_cua(
     system_prompt: str | None = None,
     max_actions: int = 30,
     model: str | None = None,
+    game_name: str = "unknown",
+    reasoning_model: str = "unknown",
 ) -> dict:
     """
     Run a vllm-powered GUI agent loop.
@@ -138,7 +140,12 @@ def main_vllm_cua(
         full_system = SYSTEM_PROMPT_DEFAULT
 
     # ── Computer ────────────────────────────────────────────────────
-    computer = LocalDesktopComputer(max_actions=max_actions)
+    computer = LocalDesktopComputer(
+        max_actions=max_actions,
+        game_name=game_name,
+        gui_agent="vllm_cua",
+        reasoning_model=model,
+    )
 
     print(f"\n{'='*50}")
     print(f"  vllm GUI Agent  |  model={model}  |  max_actions={max_actions}")
@@ -148,7 +155,18 @@ def main_vllm_cua(
 
     for step in range(1, max_actions + 1):
         screenshot = computer.screenshot()
-        
+
+        # Tell the model the actual screenshot dimensions so it stays within bounds
+        dim_text = ""
+        if computer._auto_crop and computer._crop_offset:
+            cw, ch = computer._crop_offset[2], computer._crop_offset[3]
+            dim_text = (f"\n\n[NOTE: Screenshot is cropped to the game window "
+                        f"({cw}x{ch}). Top-left of the image is (0,0). "
+                        f"All coordinates must be: 0 <= x <= {cw}, 0 <= y <= {ch}]")
+        elif computer._dimensions:
+            dw, dh = computer._dimensions
+            dim_text = f"\n\n[NOTE: Screenshot dimensions are {dw}x{dh}]"
+
         print(f"[Step {step}/{max_actions}] Asking model...")
         try:
             resp = client.chat.completions.create(
@@ -162,7 +180,7 @@ def main_vllm_cua(
                                 "url": f"data:image/png;base64,{screenshot}"
                             },
                         },
-                        {"type": "text", "text": user_prompt},
+                        {"type": "text", "text": user_prompt + dim_text},
                     ]},
                 ],
                 temperature=0,
