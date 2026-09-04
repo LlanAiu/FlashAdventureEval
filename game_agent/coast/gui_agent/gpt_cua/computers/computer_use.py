@@ -132,7 +132,7 @@ class LocalDesktopComputer(Computer):
         if os.environ.get("DEBUG_SAVE_SCREENSHOTS", "").lower() in ("1", "true", "yes"):
             self._screenshot_count += 1
             try:
-                from coast.tools.screenshot import get_screenshot_dir
+                from tools.screenshot import get_screenshot_dir
                 directory = get_screenshot_dir("screenshots", self._reasoning_model, self._gui_agent, self._game_name)
             except Exception:
                 # Fallback to env var or default
