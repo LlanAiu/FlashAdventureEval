@@ -136,7 +136,8 @@ class Agent:
             encoded_image=self.image,
             gui_model=self.gui_model,
             reasoning_model=self.reasoning_model,
-            type=self.moduler
+            type=self.moduler,
+            game_name=self.game_name
         )
 
         if self.moduler == "clue_seeker" and isinstance(result, dict):
