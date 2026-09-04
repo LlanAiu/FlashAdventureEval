@@ -70,6 +70,16 @@ def execute_action(action: dict, computer: LocalDesktopComputer) -> None:
     expected = ACTION_FIELDS[action_type]
     kwargs = {k: action.get(k) for k in expected if k in action}
 
+    # Validate required fields are present and not the wrong type (e.g. list instead of int)
+    for field in expected:
+        if field not in kwargs:
+            print(f"  [WARN] Action '{action_type}' missing required field '{field}'. Skipping.")
+            return
+        # Reject lists/None — model sometimes outputs "x": [200, 200] or null
+        if isinstance(kwargs[field], (list, dict)) or kwargs[field] is None:
+            print(f"  [WARN] Action '{action_type}' field '{field}' has invalid value {kwargs[field]}. Skipping.")
+            return
+
     # Provide defaults
     if action_type == "click" and "button" not in kwargs:
         kwargs["button"] = "left"
@@ -84,7 +94,10 @@ def execute_action(action: dict, computer: LocalDesktopComputer) -> None:
     if method is None:
         print(f"  [WARN] Computer has no method '{action_type}'")
         return
-    method(**kwargs)
+    try:
+        method(**kwargs)
+    except TypeError as e:
+        print(f"  [WARN] Action '{action_type}' execution failed: {e}. Skipping.")
 
 
 def main_vllm_cua(
