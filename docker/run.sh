@@ -64,7 +64,8 @@ case "$1" in
             -v "${PROJECT_DIR}/evaluator:/app/evaluator" \
             -v "${PROJECT_DIR}/.env:/app/.env" \
             -v "${OUTPUT_DIR}:/output" \
-            --device /dev/shm \
+            --tmpfs /dev/shm \
+            --network host \
             --memory=8g \
             "${IMAGE_NAME}:${IMAGE_TAG}"
         ;;
