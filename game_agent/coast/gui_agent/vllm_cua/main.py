@@ -152,6 +152,8 @@ def main_vllm_cua(
     print(f"{'='*50}\n")
 
     message_history: list[str] = []
+    consecutive_failures = 0
+    max_consecutive_failures = 5  # break after 5 bad retries
 
     for step in range(1, max_actions + 1):
         screenshot = computer.screenshot()
@@ -201,14 +203,20 @@ def main_vllm_cua(
 
         if finish == "length":
             print(f"  [WARN] Response truncated (hit max_tokens). Consider increasing max_tokens.")
+            consecutive_failures += 1
 
         print(f"  [RAW] {raw}...")
 
         parsed = extract_json(raw)
         if parsed is None:
-            print(f"  [WARN] Could not parse JSON. Retrying...")
+            consecutive_failures += 1
+            print(f"  [WARN] Could not parse JSON ({consecutive_failures}/{max_consecutive_failures} failures). Retrying...")
+            if consecutive_failures >= max_consecutive_failures:
+                print(f"  [ERROR] Hit {max_consecutive_failures} consecutive parse failures. Exiting loop.")
+                break
             time.sleep(1)
             continue
+        consecutive_failures = 0  # reset on success
 
         # Execute GUI action if present
         # The model may output: {"action": ...} or {"next_action": {"action": ...}}

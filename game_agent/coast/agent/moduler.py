@@ -64,8 +64,8 @@ class SeekerBot(Agent):
             
         print("🥔SeekerBot:", self.final_prompt)
             
-    def execute_action(self):
-        result = super().execute_action()
+    def execute_action(self, max_actions=30):
+        result = super().execute_action(max_actions=max_actions)
         
         # Extract clues and episodic_memory from messages
         clues = []
@@ -177,7 +177,7 @@ class SeekerBot(Agent):
         self.load_memory("clue")
         self.make_prompt()
 
-        return self.execute_action()
+        return self.execute_action(max_actions=self.config.get("max_actions_seeker", 15))
     
     
 ## Bot for solving problems
@@ -263,8 +263,8 @@ class SolverBot(Agent):
                 f"{self.mapping if self.mapping else ''}"
             )
 
-    def execute_action(self):
-        result = super().execute_action()
+    def execute_action(self, max_actions=30):
+        result = super().execute_action(max_actions=max_actions)
         messages = result.get("messages", [])
         action_count = result.get("action_count", 0)
 
@@ -312,11 +312,7 @@ class SolverBot(Agent):
         self.load_memory("success")
         self.get_mapping()
         self.make_prompt()
-        return self.execute_action()
-
-
-    
-    
+        return self.execute_action(max_actions=self.config.get("max_actions_solver", 5))    
 ## Mapping between clues and episodic memory
 class MapperBot(Agent):
     """

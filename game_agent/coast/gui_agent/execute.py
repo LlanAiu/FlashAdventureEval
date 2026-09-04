@@ -5,7 +5,7 @@ from gui_agent.vllm_cua import main_vllm_cua
 from gui_agent.gui_grounding import agent_step as main_uground
 from gui_agent.gui_grounding import run_claude_gui_agent as main_claude_sonnet
 
-def execute_action(action_prompt, system_prompt=None, encoded_image=None, gui_model="gpt_operator", reasoning_model="gpt-4o", type=None, game_name="unknown"):
+def execute_action(action_prompt, system_prompt=None, encoded_image=None, gui_model="gpt_operator", reasoning_model="gpt-4o", type=None, game_name="unknown", max_actions=30):
     if gui_model == "gpt_operator":
         return main_gpt_operator(
             user_prompt=action_prompt
@@ -37,6 +37,7 @@ def execute_action(action_prompt, system_prompt=None, encoded_image=None, gui_mo
         return main_vllm_cua(
             user_prompt=action_prompt,
             system_prompt=system_prompt,
+            max_actions=max_actions,
             game_name=game_name,
             reasoning_model=reasoning_model,
         )
