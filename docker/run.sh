@@ -2,10 +2,11 @@
 set -euo pipefail
 
 # ── Usage ────────────────────────────────────────────────────────────
-# ./docker/run.sh build                        — build the image
-# ./docker/run.sh run "Crimson Room"           — run the agent against a game
-# ./docker/run.sh run "Crimson Room" --attach  — run with interactive terminal
-# ./docker/run.sh run "Crimson Room" --uuid <UUID>  — use exact game UUID
+# ./docker/run.sh build                              — build the image
+# ./docker/run.sh run "Crimson Room"                 — run the agent
+# ./docker/run.sh run "Crimson Room" --attach        — interactive terminal
+# ./docker/run.sh run "Crimson Room" --uuid <UUID>   — use exact game UUID
+# ./docker/run.sh run "Crimson Room" --instance 1    — run in parallel (isolated Wine prefix + display)
 
 IMAGE_NAME="flashadventure"
 IMAGE_TAG="latest"
@@ -40,31 +41,56 @@ case "$1" in
         GAME_NAME="$2"
         SHIFT=2
 
-        # Optional --attach flag for interactive debugging
+        # Optional flags
         ATTACH=""
         GAME_UUID=""
-        if [[ "${3:-}" == "--attach" ]]; then
-            ATTACH="-it"
-        fi
-        if [[ "${3:-}" == "--uuid" ]]; then
-            GAME_UUID="$4"
+        INSTANCE="0"  # default: single instance
+        shift 2
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --attach)
+                    ATTACH="-it"
+                    ;;
+                --uuid)
+                    GAME_UUID="$2"
+                    shift
+                    ;;
+                --instance)
+                    INSTANCE="$2"
+                    shift
+                    ;;
+                *)
+                    echo "ERROR: Unknown flag: $1"; usage ;;
+            esac
+            shift
+        done
+
+        # Per-instance isolation
+        DISPLAY_NUM=99
+        if [[ "$INSTANCE" -ne 0 ]]; then
+            DISPLAY_NUM=$((99 + INSTANCE))
+            WINE_PREFIX_PATH="Wine${INSTANCE}"  # e.g. Wine1, Wine2
+        else
+            WINE_PREFIX_PATH="Wine"
         fi
 
         echo "Running ${IMAGE_NAME}:${IMAGE_TAG} with GAME_NAME='${GAME_NAME}'"
         if [[ -n "${GAME_UUID}" ]]; then
             echo "  Game UUID:  ${GAME_UUID}"
         fi
+        echo "  Instance:   ${INSTANCE}  (display :${DISPLAY_NUM}, Wine prefix: ${WINE_PREFIX_PATH})"
         echo "  FlashPoint: ${FLASHPOINT_DIR}"
         echo "  Output:     ${OUTPUT_DIR}"
         echo ""
 
         mkdir -p "${OUTPUT_DIR}"
 
-        docker run --rm ${ATTACH} \
-            -e DISPLAY_NUM=99 \
+         docker run --rm ${ATTACH} \
+            -e DISPLAY_NUM="${DISPLAY_NUM}" \
             -e GAME_NAME="${GAME_NAME}" \
             -e GAME_UUID="${GAME_UUID}" \
             -e FLASHPOINT_DIR=/flashpoint \
+            -e WINE_PREFIX_PATH="${WINE_PREFIX_PATH}" \
             -e OUTPUT_DIR=/output \
             -e HEADLESS=true \
             -e WINEDEBUG=-all \

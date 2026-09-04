@@ -37,9 +37,11 @@ sleep 1
 # ── Step 1.6: Fix Wine prefix ownership ──────────────────────────────
 # FlashPoint's Wine prefix is owned by the host user but the container runs
 # as root. Wine refuses to use a prefix owned by a different UID.
-log "Fixing Wine prefix ownership..."
-if [[ -d "${FLASHPOINT_DIR}/FPSoftware/Wine" ]]; then
-    chown -R root:root "${FLASHPOINT_DIR}/FPSoftware/Wine"
+WINE_PREFIX="${FLASHPOINT_DIR}/FPSoftware/${WINE_PREFIX_PATH:-Wine}"
+export WINEPREFIX="${WINE_PREFIX}"
+log "Wine prefix: ${WINEPREFIX}"
+if [[ -d "${WINE_PREFIX}" ]]; then
+    chown -R root:root "${WINE_PREFIX}"
 fi
 
 # ── Step 2: Launch game via clifp-c ─────────────────────────────────
@@ -121,6 +123,24 @@ except Exception as e:
 
 img.save("${OUTPUT_DIR}/diagnostic_before_agent.png")
 PYEOF
+
+# ── Step 3.5: Clean stale memory and screenshots from prior runs ────
+# Each run should start fresh — old mapping_memory.json can contain
+# errors or stale data that blocks progress. Screenshots from prior
+# runs are cleaned so DEBUG_SAVE_SCREENSHOTS doesn't pile up.
+log "Cleaning stale memory and screenshots for '${GAME_NAME}'..."
+MEMORY_BASE="/app/game_agent/coast/memory"
+if [[ -d "${MEMORY_BASE}" ]]; then
+    find "${MEMORY_BASE}" -path "*/${GAME_NAME}" -type d -exec rm -rf {} + 2>/dev/null || true
+    log "Memory cleaned."
+fi
+# Screenshots live under /app/game_agent/coast/screenshots*/<model>/<agent>/<game>/
+for SS_BASE in /app/game_agent/coast/screenshots /app/game_agent/coast/screenshots_after /app/game_agent/coast/screenshots_final; do
+    if [[ -d "${SS_BASE}" ]]; then
+        find "${SS_BASE}" -path "*/${GAME_NAME}" -type d -exec rm -rf {} + 2>/dev/null || true
+    fi
+done
+log "Screenshots cleaned."
 
 # ── Step 4: Run the agent ───────────────────────────────────────────
 log "Starting agent for game '${GAME_NAME}'..."
