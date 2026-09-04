@@ -126,7 +126,7 @@ class Agent:
     def needs_image(self):
         return self.gui_model not in ["gpt_operator", "claude_cua", "vllm_cua"]
 
-    def execute_action(self):
+    def execute_action(self, max_actions: int = 30):
         if self.needs_image():
             self.capture_and_encode_image()
 
@@ -137,7 +137,8 @@ class Agent:
             gui_model=self.gui_model,
             reasoning_model=self.reasoning_model,
             type=self.moduler,
-            game_name=self.game_name
+            game_name=self.game_name,
+            max_actions=max_actions
         )
 
         if self.moduler == "clue_seeker" and isinstance(result, dict):
