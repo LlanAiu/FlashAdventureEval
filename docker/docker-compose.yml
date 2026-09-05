@@ -1,0 +1,114 @@
+# FlashAdventure stack — two services, one network.
+#
+#   vllm          the model server     -> http://vllm:8000/v1
+#   game-agent    Xvfb + clifp-c + agent (ephemeral, run --rm)
+#
+# Run it:
+#   bash docker/play_one_run.sh <game>
+#
+# Config: the root .env supplies model, GPU, and cache paths.
+
+name: flashadventure
+
+# ── vLLM service ──────────────────────────────────────────────────────
+x-vllm-base: &vllm-base
+  image: vllm/vllm-openai:latest
+  ipc: host
+  runtime: nvidia
+  # Run as the invoking host user (exported by play_one_run.sh); 0:0 = root fallback.
+  user: "${HOST_UID:-0}:${HOST_GID:-0}"
+  volumes:
+    - "${HF_CACHE:-/tmp/hf}:/hf"
+  networks: [flash-net]
+  restart: unless-stopped
+  entrypoint: ["/bin/sh", "-c"]
+  command:
+    - >-
+      exec vllm serve "$$MODEL_ID"
+      --served-model-name "$$SERVED_NAME"
+      --tensor-parallel-size "$$TP"
+      --max-model-len "$$MAX_MODEL_LEN"
+      --gpu-memory-utilization "$$GPU_MEM"
+      --host 0.0.0.0 --port 8000
+      --enable-prefix-caching
+      --enable-chunked-prefill
+  healthcheck:
+    test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+    interval: 30s
+    timeout: 10s
+    retries: 40
+    start_period: 600s
+
+# Cache/identity env every vLLM container needs when running as an arbitrary host uid.
+x-vllm-env: &vllm-env
+  # torch inductor calls getpass.getuser() at import; a host LDAP uid has no passwd
+  # entry in the image, so hand it a username (getpass reads LOGNAME/USER first).
+  USER: "${USER:-app}"
+  LOGNAME: "${USER:-app}"
+  # Non-root needs writable cache homes. Weights at /hf; compile caches in /tmp.
+  HOME: /tmp
+  HF_HOME: /hf
+  XDG_CACHE_HOME: /tmp/.cache
+  VLLM_CACHE_ROOT: /tmp/.cache/vllm
+  TRITON_CACHE_DIR: /tmp/.triton
+  TORCHINDUCTOR_CACHE_DIR: /tmp/.torchinductor
+  OUTLINES_CACHE_DIR: /tmp/.outlines
+
+services:
+  vllm:
+    <<: *vllm-base
+    environment:
+      <<: *vllm-env
+      NVIDIA_VISIBLE_DEVICES: "${VLLM_GPUS:-0}"
+      MODEL_ID: "${VLLM_MODEL_ID:-Qwen/Qwen3.6-27B}"
+      SERVED_NAME: "${VLLM_SERVED_NAME:-local-model}"
+      TP: "${VLLM_TP:-1}"
+      MAX_MODEL_LEN: "${VLLM_MAX_MODEL_LEN:-32768}"
+      GPU_MEM: "${VLLM_GPU_MEM:-0.90}"
+
+  game-agent:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: flashadventure:latest
+    working_dir: /app
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
+    environment:
+      HOME: /tmp
+      USER: "${USER:-app}"
+      LOGNAME: "${USER:-app}"
+      DISPLAY_NUM: "${DISPLAY_NUM:-99}"
+      GAME_NAME: "${GAME_NAME:?GAME_NAME must be set}"
+      GAME_UUID: "${GAME_UUID:-}"
+      FLASHPOINT_DIR: /flashpoint
+      WINE_PREFIX_PATH: "${WINE_PREFIX_PATH:-Wine}"
+      OUTPUT_DIR: "/output/${GAME_NAME:-game}/${RUN_ID:-default}"
+      VLLM_BASE_URL: http://vllm:8000/v1
+      HEADLESS: "true"
+      WINEDEBUG: -all
+      VLLM_GUI_MODEL: "${VLLM_GUI_MODEL:-Qwen/Qwen3.6-27B}"
+      VLLM_MAX_TOKENS: "${VLLM_MAX_TOKENS:-4096}"
+      VLLM_MAX_REASONING_TOKENS: "${VLLM_MAX_REASONING_TOKENS:-2048}"
+      DEBUG_SAVE_SCREENSHOTS: "${DEBUG_SAVE_SCREENSHOTS:-true}"
+      RUN_ID: "${RUN_ID:-default}"
+    volumes:
+      - "${FLASHPOINT_DIR:-/playpen-nas-ssd4/aliu06/Downloads/Flashpoint}:/flashpoint"
+      - "../output:/output"
+      - "../game_agent:/app/game_agent"
+      - "../evaluator:/app/evaluator"
+      - "../.env:/app/.env:ro"
+    tmpfs: [/dev/shm]
+    mem_limit: "${AGENT_MEMORY:-8g}"
+    networks: [flash-net]
+    restart: "no"
+    depends_on:
+      vllm:
+        condition: service_healthy
+
+networks:
+  flash-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.164.0/24
+          gateway: 192.168.164.1
