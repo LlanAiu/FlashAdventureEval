@@ -265,7 +265,7 @@ VLLM_GPUS=0
 VLLM_TP=1
 VLLM_MAX_MODEL_LEN=32768
 VLLM_GPU_MEM=0.90
-HF_CACHE=/playpen-nas-ssd/nofrahm/hugging_face
+HF_CACHE=/playpen-nas-ssd/aliu06/hugging_face
 
 # ── Agent config ──
 # VLLM_BASE_URL is overridden by docker compose to http://vllm:8000/v1

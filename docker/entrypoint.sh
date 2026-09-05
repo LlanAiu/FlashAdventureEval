@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # ── Configuration (override via env vars) ───────────────────────────
+RUN_ID="${RUN_ID:-default}"
 DISPLAY_NUM="${DISPLAY_NUM:-99}"
 export DISPLAY=":${DISPLAY_NUM}"
 XVFB_RESOLUTION="${XVFB_RESOLUTION:-1280x1024x24}"
@@ -14,6 +15,10 @@ CLIFP_C="${FLASHPOINT_DIR}/CLIFp/bin/clifp-c"
 mkdir -p "$OUTPUT_DIR"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+# Log run context
+log "Run: RUN_ID=${RUN_ID}  GAME=${GAME_NAME}  DISPLAY=:${DISPLAY_NUM}"
+log "Output: ${OUTPUT_DIR}"
 
 # ── Step 1: Start Xvfb ──────────────────────────────────────────────
 log "Starting Xvfb on :${DISPLAY_NUM} at ${XVFB_RESOLUTION}..."
@@ -35,13 +40,16 @@ pkill -f "FlashpointGameServer" 2>/dev/null || true
 sleep 1
 
 # ── Step 1.6: Fix Wine prefix ownership ──────────────────────────────
-# FlashPoint's Wine prefix is owned by the host user but the container runs
-# as root. Wine refuses to use a prefix owned by a different UID.
+# FlashPoint's Wine prefix is owned by the host user but the container
+# may run as a different UID. Wine refuses to use a prefix owned by a
+# different UID, so chown to the current effective user.
 WINE_PREFIX="${FLASHPOINT_DIR}/FPSoftware/${WINE_PREFIX_PATH:-Wine}"
 export WINEPREFIX="${WINE_PREFIX}"
 log "Wine prefix: ${WINEPREFIX}"
 if [[ -d "${WINE_PREFIX}" ]]; then
-    chown -R root:root "${WINE_PREFIX}"
+    CURRENT_UID=$(id -u)
+    CURRENT_GID=$(id -g)
+    chown -R "${CURRENT_UID}:${CURRENT_GID}" "${WINE_PREFIX}"
 fi
 
 # ── Step 2: Launch game via clifp-c ─────────────────────────────────
