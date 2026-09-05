@@ -1,0 +1,24 @@
+# Dev overlay for docker/docker-compose.yml — live source mounts so code
+# edits apply WITHOUT rebuilding the game-agent image.
+#
+# Combine with the base file (compose merges the two; a later -f wins):
+#
+#   DEV=1 bash docker/play_one_run.sh <game>
+#
+# play_one_run.sh adds this automatically when DEV=1 (and drops the
+# --build flag so the first `run` builds the image once and later runs
+# reuse it with live source).
+#
+# We overlay the source dirs the agent imports, NOT the whole /app —
+# so the image-baked Python venv is left intact and never shadowed by
+# the host tree. Edits under those dirs are picked up live; a
+# *dependency* change still needs an image rebuild.
+#
+# Paths are relative to this file (docker/), so ../game_agent =
+# repo-root game_agent/.
+
+services:
+  game-agent:
+    volumes:
+      - "../game_agent:/app/game_agent"
+      - "../evaluator:/app/evaluator"
