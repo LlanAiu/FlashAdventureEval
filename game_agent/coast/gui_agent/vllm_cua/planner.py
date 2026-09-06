@@ -88,7 +88,7 @@ async def plan(
     else:
         full_system = PLANNER_SYSTEM_PROMPT
 
-    parsed = _get_api_completion(model, full_system, user_prompt, screenshot_base64)
+    parsed = await _get_api_completion(model, full_system, user_prompt, screenshot_base64)
     if parsed is None:
         raise ValueError(f"Planner returned no parseable JSON.")
 
@@ -108,14 +108,12 @@ async def _get_api_completion(model: str, system_prompt: str, prompt: str, scree
             )
             
             result = result.strip()
-            print(f"Model response (attempt {attempt}):\n{result}")
+            print(f"[Plan] Model response (attempt {attempt + 1}):\n{result}")
             
             return _extract_json(result)
         except Exception as e:
-            print(f"API call failed (attempt {attempt}): {e}")
+            print(f"[Plan] API call failed (attempt {attempt + 1}): {e}")
             await asyncio.sleep(1.5)       
-            
-            continue
         
     return {"type": "noop", "description": "API call failed after retries"}
             
@@ -133,5 +131,5 @@ def _extract_json(text: str) -> dict | list | None:
             return json.loads(match.group())
         except json.JSONDecodeError:
             pass
-    print(f"No parseable JSON found from raw text: {text}")
+    print(f"[Plan] No parseable JSON found from raw text: {text}")
     return None
