@@ -108,7 +108,7 @@ def main(config_path="config.yaml", games_path="./json/game_prompt.json", game_n
         game_name = choose_game(game_dict)
     print(f"\n🎯 Selected Game: {game_name}")
 
-    MAX_ITER = 10
+    MAX_ITER = config.get("max_iter", 10)
     total_actions = 0
     total_seeker = 0
     total_solver = 0
