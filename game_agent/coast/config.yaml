@@ -1,6 +1,7 @@
 # If even one action succeeds, stop the entire tree traversal and restart from the root task
 RESET_ON_SUCCESS: true
 max_action_count: 1000
+max_iter: 10   # Maximum number of coast agent cycles
 
 # Prompt path
 
