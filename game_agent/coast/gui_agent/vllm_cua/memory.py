@@ -99,7 +99,9 @@ async def update_memory(
     if not isinstance(episodic, list):
         episodic = []
 
-    return clues, episodic
+    extras = {k: v for k, v in parsed.items() if k not in ("clues", "episodic_memory")}
+
+    return clues, episodic, extras
 
 async def _get_api_completion(model: str, system_prompt: str, prompt: str, screenshot: str, max_retries: int = 3):
     for attempt in range(max_retries):
