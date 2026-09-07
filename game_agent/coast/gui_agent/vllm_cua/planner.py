@@ -17,7 +17,10 @@ from dotenv import load_dotenv
 from api import api_caller
 
 PLANNER_SYSTEM_PROMPT = """You are an autonomous GUI agent that controls a desktop environment.
-You will be shown a screenshot and given a task.
+You will be shown one or two screenshots and given a task.
+
+When two images are provided, the first is the state before your last action
+and the second is the current state. Use them to decide what to do next.
 
 Return EXACTLY ONE action as a JSON object. Valid action types:
 
@@ -53,18 +56,19 @@ Rules:
 
 async def plan(
     *,
-    screenshot_base64: str,
+    screenshot_base64: str | list[str],
     user_prompt: str,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
 ) -> dict:
     """
-    Send the screenshot and task to Qwen for planning.
+    Send the screenshot(s) and task to Qwen for planning.
 
     Parameters
     ----------
-    screenshot_base64 : str
-        Base64-encoded PNG screenshot.
+    screenshot_base64 : str | list[str]
+        Base64-encoded PNG screenshot(s). Two images are sent when comparing
+        the before/after state of the previous action.
     user_prompt : str
         The high-level task description.
     system_prompt : str | None
@@ -94,7 +98,7 @@ async def plan(
     return parsed
 
 
-async def _get_api_completion(model: str, system_prompt: str, prompt: str, screenshot: str, max_retries: int = 3):
+async def _get_api_completion(model: str, system_prompt: str, prompt: str, screenshot: str | list[str], max_retries: int = 3):
 
     for attempt in range(max_retries):
         try:
