@@ -21,14 +21,16 @@ from api import api_caller
 
 
 MEMORY_SYSTEM_PROMPT = """You are a visual reasoning agent analyzing a game screenshot.
-Your goal is to extract all meaningful clues and summarize the current scene."""
+Your goal is to extract all **new** meaningful clues visible in the current scene.
+
+If the scene is unchanged from previous steps, or no new clues are visible,
+return empty lists for both clues and episodic_memory. Do not re-report old clues."""
 
 
 async def update_memory(
     *,
     screenshot_base64: str,
     action_prompt: str,
-    user_prompt: str,
     existing_clues: Optional[list[dict]] = None,
     existing_episodic: Optional[list[str]] = None,
     system_prompt: Optional[str] = None,
@@ -43,8 +45,6 @@ async def update_memory(
         Base64-encoded PNG screenshot.
     action_prompt : str
         The clue-seeker action prompt template (from action_prompt.json).
-    user_prompt : str
-        The high-level task description (e.g. "Find the hidden key").
     existing_clues : list[dict] | None
         Clues already found — included as context to avoid duplicates.
     existing_episodic : list[str] | None
@@ -67,25 +67,26 @@ async def update_memory(
     else:
         full_system = MEMORY_SYSTEM_PROMPT
 
-    prompt_parts = [
-        action_prompt,
-        "",
-        f"[Task] {user_prompt}",
-    ]
+    prompt_parts = [action_prompt]
 
     if existing_clues:
         prompt_parts.append(
-            "[Previously Found Clues — do NOT duplicate these]\n"
-            f"{json.dumps(existing_clues, indent=2)}"
+            "\n[Previously Found Clues — do NOT duplicate these]\n"
+            f"{json.dumps(existing_clues, indent=2)}\n\n"
+            "If everything you see is already listed above, return an empty clues list.\n"
+            "You are only looking for **new** information."
         )
 
     if existing_episodic:
         prompt_parts.append(
-            "[Previous Episodic Memory]\n"
-            f"{json.dumps(existing_episodic, indent=2)}"
+            "\n[Previous Episodic Memory]\n"
+            f"{json.dumps(existing_episodic, indent=2)}\n\n"
+            "If no meaningful new observation was made this step, return an empty episodic_memory list."
         )
 
     prompt = "\n".join(prompt_parts)
+    
+    print(f"Final Memory Prompt:\nSystem: {full_system}\nUser: {prompt}")
 
     parsed = await _get_api_completion(model, full_system, prompt, screenshot_base64)
     if parsed is None:

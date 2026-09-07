@@ -52,7 +52,6 @@ def main_vllm_cua(
     """
     return asyncio.run(
         _run_loop(
-            user_prompt=user_prompt,
             system_prompt=system_prompt,
             max_actions=max_actions,
             model=model,
@@ -62,7 +61,6 @@ def main_vllm_cua(
     )
 
 async def _run_loop(
-    user_prompt: str,
     system_prompt: Optional[str],
     max_actions: int,
     model: Optional[str],
@@ -109,7 +107,6 @@ async def _run_loop(
             new_clues, new_episodic, extras = await update_memory(
                 screenshot_base64=screenshot,
                 action_prompt=action_prompt,
-                user_prompt=user_prompt,
                 existing_clues=all_clues,
                 existing_episodic=all_episodic,
                 system_prompt=system_prompt,
