@@ -96,6 +96,9 @@ async def _run_loop(
     consecutive_failures = 0
     max_consecutive_failures = 5
 
+    last_screenshot: Optional[str] = None
+    last_action: Optional[dict] = None
+
     for step in range(1, max_actions + 1):
         print(f"[Step {step}/{max_actions}] Capturing screenshot...")
         screenshot = computer.screenshot()
@@ -120,10 +123,14 @@ async def _run_loop(
             print(f"[Main] Memory update failed (step {step}): {e}")
 
         print(f"[Step {step}] Planning action...")
+        planner_images, planner_user_prompt = _build_planner_context(
+            last_screenshot, last_action, screenshot, planner_prompt
+        )
+
         try:
             action = await plan(
-                screenshot_base64=screenshot,
-                user_prompt=planner_prompt,
+                screenshot_base64=planner_images,
+                user_prompt=planner_user_prompt,
                 system_prompt=system_prompt,
                 model=model,
             )
@@ -142,6 +149,9 @@ async def _run_loop(
             continue
 
         consecutive_failures = 0
+
+        last_screenshot = screenshot
+        last_action = action
 
         x, y = await _maybe_ground(action, screenshot, img_w, img_h)
         if (x, y) is None:
@@ -169,6 +179,41 @@ async def _run_loop(
         "episodic": all_episodic,
         "extras": merged_extras,
     }
+
+def _build_planner_context(
+    last_screenshot: Optional[str],
+    last_action: Optional[dict],
+    screenshot: str,
+    planner_prompt: str,
+) -> tuple[list[str], str]:
+    """
+    Build the image list and user prompt for the planner stage.
+
+    On step 1 (no prior action) returns a single image and the plain prompt.
+    On subsequent steps returns two images (before + after) with labeled text
+    so the model can visually compare the effect of its last action.
+
+    Returns
+    -------
+    (images, prompt) : tuple[list[str], str]
+        ``images`` is a 1- or 2-element list of base64 screenshots.
+        ``prompt`` is the fully constructed user prompt string.
+    """
+    if last_screenshot is not None and last_action is not None:
+        at = last_action.get("type", "unknown")
+        desc = last_action.get("description", last_action.get("text", ""))
+        return (
+            [last_screenshot, screenshot],
+            (
+                "[Image 1 - Before your last action]\n"
+                "[Image 2 - Current state]\n\n"
+                f"[Previous Action] {at} — {desc}\n\n"
+                "Compare the two images above and decide on the next action.\n\n"
+                f"{planner_prompt}"
+            ),
+        )
+    return [screenshot], planner_prompt
+
 
 def _get_image_dims(computer: LocalDesktopComputer) -> tuple[int, int]:
     """Return the screenshot dimensions (cropped or full-screen)."""
