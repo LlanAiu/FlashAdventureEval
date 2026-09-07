@@ -20,7 +20,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from tools import load_config, load_action_prompt
+from tools import load_config, load_action_prompt, load_planner_prompt
 from ..gpt_cua.computers.computer_use import LocalDesktopComputer
 from .planner import plan
 from .grounder import ground
@@ -74,6 +74,7 @@ async def _run_loop(
 
     model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
     action_prompt = _load_action_prompt(moduler)
+    planner_prompt = _load_planner_prompt(moduler)
 
     computer = LocalDesktopComputer(
         max_actions=max_actions,
@@ -122,7 +123,7 @@ async def _run_loop(
         try:
             action = await plan(
                 screenshot_base64=screenshot,
-                user_prompt=user_prompt,
+                user_prompt=planner_prompt,
                 system_prompt=system_prompt,
                 model=model,
             )
@@ -293,3 +294,9 @@ def _load_action_prompt(moduler: str = "clue_seeker") -> str:
     """Load the action prompt template via the shared tools loader."""
     config = load_config("config.yaml")
     return load_action_prompt(config.get("action_prompt_path"), moduler)
+
+
+def _load_planner_prompt(moduler: str = "clue_seeker") -> str:
+    """Load the planner prompt template via the shared tools loader."""
+    config = load_config("config.yaml")
+    return load_planner_prompt(config.get("action_prompt_path"), moduler)
