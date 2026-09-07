@@ -116,7 +116,7 @@ async def _run_loop(
                 new_clues, new_episodic, extras,
             )
         except Exception as e:
-            print(f"  [Main] Memory update failed (step {step}): {e}")
+            print(f"[Main] Memory update failed (step {step}): {e}")
 
         print(f"[Step {step}] Planning action...")
         try:
@@ -127,14 +127,14 @@ async def _run_loop(
                 model=model,
             )
         except Exception as e:
-            print(f"  [Main] Planning failed (step {step}): {e}")
+            print(f"[Main] Planning failed (step {step}): {e}")
             if _check_failures(consecutive_failures := consecutive_failures + 1,
                                max_consecutive_failures):
                 break
             continue
 
         if action.get("type") == "noop":
-            print(f"  [Main] Planner returned noop. Retrying...")
+            print(f"[Main] Planner returned noop. Retrying...")
             if _check_failures(consecutive_failures := consecutive_failures + 1,
                                max_consecutive_failures):
                 break
@@ -150,7 +150,7 @@ async def _run_loop(
             continue
 
         action_type = action.get("type", "wait")
-        print(f"  [Main] Executing: {action_type} (x={x}, y={y})")
+        print(f"[Main] Executing: {action_type} (x={x}, y={y})")
         _execute_action(action, computer, x=x, y=y)
         message_history.append(json.dumps(action))
         time.sleep(0.5)
@@ -195,10 +195,10 @@ async def _maybe_ground(
 
     description = action.get("description", "")
     if not description:
-        print(f"  [Main] Action '{action_type}' missing description. Skipping.")
+        print(f"[Main] Action '{action_type}' missing description. Skipping.")
         return None
 
-    print(f"  [Grounding] {description}")
+    print(f"[Grounding] {description}")
     try:
         return await ground(
             screenshot_base64=screenshot,
@@ -207,7 +207,7 @@ async def _maybe_ground(
             image_height=img_h,
         )
     except Exception as e:
-        print(f"  [Main] Grounding failed: {e}")
+        print(f"[Main] Grounding failed: {e}")
         return None
 
 
@@ -242,7 +242,7 @@ def _accumulate_state(
 def _check_failures(count: int, max_failures: int) -> bool:
     """Log and return True if max consecutive failures reached."""
     if count >= max_failures:
-        print(f"  [Main] Hit {max_failures} consecutive failures. Exiting.")
+        print(f"[Main] Hit {max_failures} consecutive failures. Exiting.")
         return True
     return False
 
@@ -285,9 +285,9 @@ def _execute_action(action: dict, computer: LocalDesktopComputer, x: int = 0, y:
         elif action_type == "noop":
             pass
         else:
-            print(f"  [Main] Unknown action type: {action_type}")
+            print(f"[Main] Unknown action type: {action_type}")
     except Exception as e:
-        print(f"  [Main] Action execution failed ({action_type}): {e}")
+        print(f"[Main] Action execution failed ({action_type}): {e}")
 
 def _load_action_prompt(moduler: str = "clue_seeker") -> str:
     """Load the action prompt template via the shared tools loader."""
