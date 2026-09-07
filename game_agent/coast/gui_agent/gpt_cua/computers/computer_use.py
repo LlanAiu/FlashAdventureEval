@@ -5,7 +5,7 @@ import base64
 import subprocess
 from typing import List, Dict, Literal
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import mss
 import pyautogui
 from .computer import Computer
@@ -72,12 +72,13 @@ class LocalDesktopComputer(Computer):
         self._action_count = 0
         self._max_actions = max_actions
         self._countable = ["click", "double_click", "scroll", "type", "keypress", "drag"]
-        self._screenshot_count = 0
-
         # Screenshot saving metadata
         self._game_name = game_name
         self._gui_agent = gui_agent
         self._reasoning_model = reasoning_model
+
+        # Start from next available number so new bots don't overwrite old screenshots
+        self._screenshot_count = self._next_screenshot_number()
 
         # Crop region for game window
         self._auto_crop = auto_crop and os.environ.get("HEADLESS", "").lower() in ("1", "true", "yes")
@@ -90,6 +91,26 @@ class LocalDesktopComputer(Computer):
             else:
                 print("[WARN] Could not detect game window for cropping; using full screen.")
                 self._auto_crop = False
+
+    def _next_screenshot_number(self) -> int:
+        """Scan the screenshot dir for existing files and return the next available number."""
+        try:
+            from tools.screenshot import get_screenshot_dir
+            directory = get_screenshot_dir("screenshots", self._reasoning_model, self._gui_agent, self._game_name)
+            existing_files = [
+                f for f in os.listdir(directory)
+                if f.startswith("flash_screenshot_") and f.endswith(".png")
+            ]
+            numbers = []
+            for filename in existing_files:
+                try:
+                    num_str = filename.replace("flash_screenshot_", "").replace(".png", "")
+                    numbers.append(int(num_str))
+                except ValueError:
+                    continue
+            return max(numbers, default=0)
+        except Exception:
+            return 0
 
     @property
     def environment(self) -> Literal["windows", "mac", "linux"]:
