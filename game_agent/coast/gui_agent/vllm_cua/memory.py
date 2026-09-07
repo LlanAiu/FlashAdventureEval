@@ -85,8 +85,6 @@ async def update_memory(
         )
 
     prompt = "\n".join(prompt_parts)
-    
-    print(f"Final Memory Prompt:\nSystem: {full_system}\nUser: {prompt}")
 
     parsed = await _get_api_completion(model, full_system, prompt, screenshot_base64)
     if parsed is None:
