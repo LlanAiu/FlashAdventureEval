@@ -62,7 +62,7 @@ async def ground(
     load_dotenv()
 
     base_url = os.getenv("UGROUND_BASE_URL", "http://127.0.0.1:9073/v1")
-    model = model or os.getenv("UGROUND_MODEL") or "osunlp/UGround-V1-7B"
+    model = model or os.getenv("UGROUND_MODEL") or "UGround-V1-7B"
 
     response = await _call_uground(
         screenshot_base64,
