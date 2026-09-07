@@ -81,7 +81,7 @@ async def plan(
     """
     load_dotenv()
     
-    model = model or os.getenv("VLLM_MODEL") or "Qwen/Qwen3.6-27B"
+    model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
 
     if system_prompt:
         full_system = f"{system_prompt}\n\n{PLANNER_SYSTEM_PROMPT}"

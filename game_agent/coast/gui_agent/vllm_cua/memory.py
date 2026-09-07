@@ -60,7 +60,7 @@ async def update_memory(
     """
     load_dotenv()
 
-    model = model or os.getenv("VLLM_MODEL") or "Qwen/Qwen3.6-27B"
+    model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
 
     if system_prompt:
         full_system = f"{system_prompt}\n\n{MEMORY_SYSTEM_PROMPT}"

@@ -73,7 +73,7 @@ async def _run_loop(
     """Core async loop: screenshot → memory → plan → ground → execute."""
     load_dotenv()
 
-    model = model or os.getenv("VLLM_MODEL") or "Qwen/Qwen3.6-27B"
+    model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
     action_prompt = _load_action_prompt(moduler)
 
     computer = LocalDesktopComputer(
