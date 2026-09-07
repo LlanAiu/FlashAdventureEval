@@ -140,5 +140,9 @@ def vllm_completion(system_prompt, model_name, base64_images, prompt):
         }
     )
             
-    return response.choices[0].message.content
+    raw = response.choices[0].message.content
     
+    if raw == None:
+        print(f"Raw VLLM output was None. Received response: {response}")
+    
+    return raw
