@@ -20,9 +20,8 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
+from tools import load_config, load_action_prompt
 from ..gpt_cua.computers.computer_use import LocalDesktopComputer
-from ...tools import load_config, load_action_prompt
-
 from .planner import plan
 from .grounder import ground
 from .memory import update_memory

@@ -17,7 +17,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from game_agent.coast.api import api_caller
+from api import api_caller
 
 
 MEMORY_SYSTEM_PROMPT = """You are a visual reasoning agent analyzing a game screenshot.

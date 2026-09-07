@@ -12,10 +12,9 @@ import os
 import re
 from typing import Optional
 
-from openai import OpenAI
 from dotenv import load_dotenv
 
-from game_agent.coast.api import api_caller
+from api import api_caller
 
 PLANNER_SYSTEM_PROMPT = """You are an autonomous GUI agent that controls a desktop environment.
 You will be shown a screenshot and given a task.
