@@ -21,10 +21,11 @@ from api import api_caller
 
 
 MEMORY_SYSTEM_PROMPT = """You are a visual reasoning agent analyzing a game screenshot.
-Your goal is to extract all **new** meaningful clues visible in the current scene.
+Your goal is to extract all **new** meaningful clues and information visible in the current scene.
 
 If the scene is unchanged from previous steps, or no new clues are visible,
-return empty lists for both clues and episodic_memory. Do not re-report old clues."""
+return empty lists for both clues and episodic_memory. Do not re-report identical old clues. 
+However, if new information is revealed about an existing clue, make a new one containing the details as there is no deletion mechanic."""
 
 
 async def update_memory(
@@ -35,6 +36,7 @@ async def update_memory(
     existing_episodic: Optional[list[str]] = None,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
+    skip_system_prompt: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     """
     Analyze a screenshot and return discovered clues and episodic memory.
@@ -62,7 +64,9 @@ async def update_memory(
 
     model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
 
-    if system_prompt:
+    if skip_system_prompt:
+        full_system = system_prompt
+    elif system_prompt:
         full_system = f"{system_prompt}\n\n{MEMORY_SYSTEM_PROMPT}"
     else:
         full_system = MEMORY_SYSTEM_PROMPT
@@ -71,9 +75,9 @@ async def update_memory(
 
     if existing_clues:
         prompt_parts.append(
-            "\n[Previously Found Clues — do NOT duplicate these]\n"
+            "\n[Previously Found Clues — avoid duplicating these if no new information about them has been revealed]\n"
             f"{json.dumps(existing_clues, indent=2)}\n\n"
-            "If everything you see is already listed above, return an empty clues list.\n"
+            "If everything you see is already listed above with no new information to add, return an empty clues list.\n"
             "You are only looking for **new** information."
         )
 

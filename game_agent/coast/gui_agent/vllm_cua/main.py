@@ -111,6 +111,7 @@ async def _run_loop(
                 existing_episodic=all_episodic,
                 system_prompt=system_prompt,
                 model=model,
+                skip_system_prompt=moduler == "problem_solver",
             )
             all_clues, all_episodic, merged_extras = _accumulate_state(
                 all_clues, all_episodic, merged_extras,
