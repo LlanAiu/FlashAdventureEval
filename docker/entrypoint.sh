@@ -68,23 +68,52 @@ log "clifp-c started (PID ${CLIFP_PID})"
 # ── Step 3: Wait for the game window to appear ──────────────────────
 log "Waiting for game window to appear..."
 GAME_READY=0
+GAME_WINDOW_ID=""
 for i in $(seq 1 60); do
-    if DISPLAY=":${DISPLAY_NUM}" xdotool search --name "Flash" 2>/dev/null | head -1 | grep -q .; then
+    # Search for game windows: Chromium (HTML5/WebGL) or Flash (Wine)
+    # --name matches substrings, so "WebGL" hits "Unity WebGL Player" windows
+    # and "Flash" hits flashplayer windows
+    CANDIDATE_ID=""
+    for pattern in "WebGL" "Chromium" "Flash"; do
+        while IFS= read -r wid; do
+            [ -z "$wid" ] && continue
+            # Skip tiny windows (clipboard, selection, etc — usually < 200x200)
+            GEOM=$(DISPLAY=":${DISPLAY_NUM}" xdotool getwindowgeometry --shell "$wid" 2>/dev/null || true)
+            if [ -n "$GEOM" ]; then
+                W=$(echo "$GEOM" | grep '^WIDTH=' | cut -d= -f2)
+                H=$(echo "$GEOM" | grep '^HEIGHT=' | cut -d= -f2)
+                if [ "${W:-0}" -ge 200 ] && [ "${H:-0}" -ge 200 ] 2>/dev/null; then
+                    CANDIDATE_ID="$wid"
+                    break 2  # Found a valid window, stop searching
+                fi
+            fi
+        done <<< "$(DISPLAY=":${DISPLAY_NUM}" xdotool search --name "$pattern" 2>/dev/null)"
+    done
+    if [ -n "$CANDIDATE_ID" ]; then
         GAME_READY=1
-        log "Game window detected after ${i}s"
+        GAME_WINDOW_ID="$CANDIDATE_ID"
+        WNAME=$(DISPLAY=":${DISPLAY_NUM}" xdotool getwindowname "$CANDIDATE_ID" 2>/dev/null)
+        GEOM=$(DISPLAY=":${DISPLAY_NUM}" xdotool getwindowgeometry "$CANDIDATE_ID" 2>/dev/null)
+        log "Game window detected after ${i}s (ID: ${CANDIDATE_ID}, title: '${WNAME}')"
+        log "  ${GEOM}"
         break
     fi
     sleep 1
 done
 
 if [ "$GAME_READY" -eq 0 ]; then
-    log "WARNING: No Flash window detected after 60s — proceeding anyway"
+    log "WARNING: No game window detected after 60s — proceeding anyway"
 fi
 
 # Focus the game window so clicks go to the right place
 log "Focusing game window..."
-DISPLAY=":${DISPLAY_NUM}" xdotool search --name "Flash" windowactivate --sync --window %@ 2>/dev/null || true
-sleep 1
+if [ -n "$GAME_WINDOW_ID" ]; then
+    DISPLAY=":${DISPLAY_NUM}" xdotool windowactivate --sync --window "$GAME_WINDOW_ID" 2>/dev/null || true
+else
+    # Fallback: activate first large window matching game patterns
+    DISPLAY=":${DISPLAY_NUM}" xdotool search --name "WebGL" windowactivate --sync --window %@ 2>/dev/null || true
+fi
+sleep 2
 
 # Take a diagnostic screenshot (cropped to game window if possible)
 log "Taking diagnostic screenshot..."
@@ -97,17 +126,21 @@ with mss.mss() as sct:
     shot = sct.grab(mon)
     img = Image.frombytes("RGB", shot.size, shot.rgb)
 
-# Try to find the Flash window and crop to it
+# Try to find the game window and crop to it
 try:
-    r = subprocess.run(["xdotool", "search", "--name", "Flash", "getwindowgeometry", "--shell", "%1"],
-                       capture_output=True, text=True, timeout=5)
-    if r.returncode != 0:
-        w = subprocess.run(["xdotool", "search", "--name", "Flash"],
+    # Use the window ID we detected earlier, if available
+    wid = "${GAME_WINDOW_ID}"
+    if not wid:
+        # Fallback: find first game window by name
+        w = subprocess.run(["xdotool", "search", "--name", "WebGL"],
                            capture_output=True, text=True, timeout=5)
         if w.returncode == 0 and w.stdout.strip():
             wid = w.stdout.strip().split("\n")[0]
-            r = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid],
-                               capture_output=True, text=True, timeout=5)
+    if wid:
+        r = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid],
+                           capture_output=True, text=True, timeout=5)
+    else:
+        r = subprocess.CalledProcessError(1, "no window found")
     if r.returncode == 0:
         v = {}
         for line in r.stdout.strip().split("\n"):
