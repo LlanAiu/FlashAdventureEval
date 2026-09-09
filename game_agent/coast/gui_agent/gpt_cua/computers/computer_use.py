@@ -11,41 +11,34 @@ import pyautogui
 from .computer import Computer
 
 
-def _get_flash_window_bounds() -> tuple[int, int, int, int] | None:
-    """Get the Flash window's position and size via xdotool.
-    Returns (x, y, width, height) or None if window not found."""
+def _get_game_window_bounds() -> tuple[int, int, int, int] | None:
+    """Get a game window's position and size via xdotool.
+    Searches for Flash, WebGL, or Chromium windows (mimics entrypoint.sh logic).
+    Returns (x, y, width, height) or None if no window found."""
     try:
-        result = subprocess.run(
-            ["xdotool", "search", "--name", "Flash", "--onlyvisible", "getwindowgeometry", "--shell", "%1"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode != 0:
-            # Fallback: get first window matching "Flash"
-            window_search = subprocess.run(
-                ["xdotool", "search", "--name", "Flash"],
+        for pattern in ("Flash", "WebGL", "Chromium"):
+            search = subprocess.run(
+                ["xdotool", "search", "--name", pattern],
                 capture_output=True, text=True, timeout=5
             )
-            if window_search.returncode != 0 or not window_search.stdout.strip():
-                return None
-            win_id = window_search.stdout.strip().split("\n")[0]
-            result = subprocess.run(
-                ["xdotool", "getwindowgeometry", "--shell", win_id],
-                capture_output=True, text=True, timeout=5
-            )
-        
-        if result.returncode == 0:
-            # Parse output like: X=200\nY=100\nWIDTH=800\nHEIGHT=600\n...
-            vals = {}
-            for line in result.stdout.strip().split("\n"):
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    vals[k.strip()] = int(v.strip())
-            return (
-                vals.get("X", 0),
-                vals.get("Y", 0),
-                vals.get("WIDTH", 0),
-                vals.get("HEIGHT", 0),
-            )
+            if search.returncode == 0 and search.stdout.strip():
+                win_id = search.stdout.strip().split("\n")[0]
+                result = subprocess.run(
+                    ["xdotool", "getwindowgeometry", "--shell", win_id],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    vals = {}
+                    for line in result.stdout.strip().split("\n"):
+                        if "=" in line:
+                            k, v = line.split("=", 1)
+                            vals[k.strip()] = int(v.strip())
+                    return (
+                        vals.get("X", 0),
+                        vals.get("Y", 0),
+                        vals.get("WIDTH", 0),
+                        vals.get("HEIGHT", 0),
+                    )
     except Exception:
         pass
     return None
@@ -84,7 +77,7 @@ class LocalDesktopComputer(Computer):
         self._auto_crop = auto_crop and os.environ.get("HEADLESS", "").lower() in ("1", "true", "yes")
         self._crop_offset: tuple[int, int, int, int] | None = None  # (x, y, w, h)
         if self._auto_crop:
-            self._crop_offset = _get_flash_window_bounds()
+            self._crop_offset = _get_game_window_bounds()
             if self._crop_offset:
                 print(f"[INFO] Game window detected at: x={self._crop_offset[0]}, y={self._crop_offset[1]}, w={self._crop_offset[2]}, h={self._crop_offset[3]}")
                 print(f"[INFO] Screenshots will be cropped to game window; action coordinates will be offset.")
@@ -146,7 +139,7 @@ class LocalDesktopComputer(Computer):
             x, y, w, h = self._crop_offset
             img = img.crop((x, y, x + w, y + h))
             # Re-detect in case window moved
-            new_offset = _get_flash_window_bounds()
+            new_offset = _get_game_window_bounds()
             if new_offset:
                 self._crop_offset = new_offset
 
