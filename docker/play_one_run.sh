@@ -77,9 +77,9 @@ if [[ -n "$UUID" ]]; then
 fi
 echo ""
 
-# ── 1) Bring vLLM up (kept warm across runs) ─────────────────────────
-echo "[play_one_run] ensuring vLLM is up (wait for healthy)…"
-"${COMPOSE[@]}" up -d --wait vllm
+# ── 1) Bring model servers up (kept warm across runs) ─────────────────
+echo "[play_one_run] ensuring model servers are up (wait for healthy)…"
+"${COMPOSE[@]}" up -d --wait vllm uground
 
 # ── 2) Run the game in the foreground; capture its exit code ─────────
 echo "[play_one_run] running game (foreground)…"

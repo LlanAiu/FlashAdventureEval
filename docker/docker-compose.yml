@@ -1,7 +1,8 @@
-# FlashAdventure stack — two services, one network.
+# FlashAdventure stack — three services, one network.
 #
-#   vllm          the model server     -> http://vllm:8000/v1
-#   game-agent    Xvfb + clifp-c + agent (ephemeral, run --rm)
+#   vllm          main model server       -> http://vllm:8000/v1
+#   uground       grounding model server   -> http://uground:8000/v1
+#   game-agent    Xvfb + clifp-c + agent   (ephemeral, run --rm)
 #
 # Run it:
 #   bash docker/play_one_run.sh <game>
@@ -19,19 +20,10 @@ x-vllm-base: &vllm-base
   user: "${HOST_UID:-0}:${HOST_GID:-0}"
   volumes:
     - "${HF_CACHE:-/tmp/hf}:/hf"
+    - "./vllm-entrypoint.sh:/vllm-entrypoint.sh:ro"
   networks: [flash-net]
   restart: unless-stopped
-  entrypoint: ["/bin/sh", "-c"]
-  command:
-    - >-
-      exec vllm serve "$$MODEL_ID"
-      --served-model-name "$$SERVED_NAME"
-      --tensor-parallel-size "$$TP"
-      --max-model-len "$$MAX_MODEL_LEN"
-      --gpu-memory-utilization "$$GPU_MEM"
-      --host 0.0.0.0 --port 8000
-      --enable-prefix-caching
-      --enable-chunked-prefill
+  entrypoint: ["/vllm-entrypoint.sh"]
   healthcheck:
     test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
     interval: 30s
@@ -59,12 +51,29 @@ services:
     <<: *vllm-base
     environment:
       <<: *vllm-env
-      NVIDIA_VISIBLE_DEVICES: "${VLLM_GPUS:-0}"
+      GPUS: "${VLLM_GPUS:-0}"
       MODEL_ID: "${VLLM_MODEL_ID:-Qwen/Qwen3.6-27B}"
-      SERVED_NAME: "${VLLM_SERVED_NAME:-local-model}"
-      TP: "${VLLM_TP:-1}"
-      MAX_MODEL_LEN: "${VLLM_MAX_MODEL_LEN:-32768}"
-      GPU_MEM: "${VLLM_GPU_MEM:-0.90}"
+      SERVED_NAME: "${VLLM_SERVED_NAME:-Qwen3.6-27B}"
+      MODEL_ALIAS: "${VLLM_MODEL_ID:-QuantTrio/Qwen3.6-27B-AWQ}"
+      TP: "${VLLM_TP:-2}"
+      MAX_MODEL_LEN: "${VLLM_MAX_MODEL_LEN:-128000}"
+      GPU_MEM: "${VLLM_GPU_MEM:-0.65}"
+      QUANT_FLAG: "${VLLM_QUANT_FLAG:-}"
+      KV_QUANT: "${VLLM_KV_QUANT:-fp8}"
+
+  uground:
+    <<: *vllm-base
+    environment:
+      <<: *vllm-env
+      GPUS: "${UGROUND_GPUS:-1}"
+      MODEL_ID: "${UGROUND_MODEL_ID:-UGround/UGround-V1-7B}"
+      SERVED_NAME: "${UGROUND_SERVED_NAME:-UGround-V1-7B}"
+      MODEL_ALIAS: "${UGROUND_MODEL_ID:-UGround/UGround-V1-7B}"
+      TP: "${UGROUND_TP:-2}"
+      MAX_MODEL_LEN: "${UGROUND_MAX_MODEL_LEN:-8192}"
+      GPU_MEM: "${UGROUND_GPU_MEM:-0.25}"
+      QUANT_FLAG: "${UGROUND_QUANT_FLAG:-}"
+      KV_QUANT: "${UGROUND_KV_QUANT:-}"
 
   game-agent:
     build:
@@ -78,17 +87,20 @@ services:
       USER: "${USER:-app}"
       LOGNAME: "${USER:-app}"
       DISPLAY_NUM: "${DISPLAY_NUM:-99}"
-      GAME_NAME: "${GAME_NAME:?GAME_NAME must be set}"
+      GAME_NAME: "${GAME_NAME:-}"
       GAME_UUID: "${GAME_UUID:-}"
       FLASHPOINT_DIR: /flashpoint
       WINE_PREFIX_PATH: "${WINE_PREFIX_PATH:-Wine}"
       OUTPUT_DIR: "/output/${GAME_NAME:-game}/${RUN_ID:-default}"
       VLLM_BASE_URL: http://vllm:8000/v1
+      VLLM_MODEL: "${VLLM_SERVED_NAME:-Qwen3.6-27B}"
       HEADLESS: "true"
       WINEDEBUG: -all
-      VLLM_GUI_MODEL: "${VLLM_GUI_MODEL:-Qwen/Qwen3.6-27B}"
-      VLLM_MAX_TOKENS: "${VLLM_MAX_TOKENS:-4096}"
-      VLLM_MAX_REASONING_TOKENS: "${VLLM_MAX_REASONING_TOKENS:-2048}"
+      VLLM_GUI_MODEL: "${VLLM_GUI_MODEL:-Qwen3.6-27B}"
+      VLLM_MAX_TOKENS: "${VLLM_MAX_TOKENS:-8192}"
+      VLLM_MAX_REASONING_TOKENS: "${VLLM_MAX_REASONING_TOKENS:-4096}"
+      UGROUND_BASE_URL: http://uground:8000/v1
+      UGROUND_MODEL: "${UGROUND_SERVED_NAME:-UGround-V1-7B}"
       DEBUG_SAVE_SCREENSHOTS: "${DEBUG_SAVE_SCREENSHOTS:-true}"
       RUN_ID: "${RUN_ID:-default}"
     volumes:
@@ -103,6 +115,8 @@ services:
     restart: "no"
     depends_on:
       vllm:
+        condition: service_healthy
+      uground:
         condition: service_healthy
 
 networks:
