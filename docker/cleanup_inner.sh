@@ -7,6 +7,7 @@ set -euo pipefail
 BASE="/app/game_agent/coast"
 SCREENSHOTS="$BASE/screenshots"
 MEMORY="$BASE/memory"
+OUTPUT_DIR="/app/output"
 DRY_RUN="$1"
 GUI="${2:-}"
 MODEL="${3:-}"
@@ -76,5 +77,15 @@ done
 if [[ "$DRY_RUN" != "true" ]]; then
     echo ""
     echo "$pruned" | xargs rm -rf
-    echo "✓ Done."
 fi
+
+if [[ -d "$OUTPUT_DIR" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "Would remove: $OUTPUT_DIR"
+    else
+        echo "Removing $OUTPUT_DIR ..."
+        rm -rf "$OUTPUT_DIR"
+    fi
+fi
+
+echo "✓ Done."

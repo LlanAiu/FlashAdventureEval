@@ -12,6 +12,10 @@ OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 CLIFP_C="${FLASHPOINT_DIR}/CLIFp/bin/clifp-c"
 
 mkdir -p "$OUTPUT_DIR"
+# Ensure output dir is owned by current user (not leftover root-owned from prior runs)
+if [[ -d "$OUTPUT_DIR" ]] && [[ -n "$(find "$OUTPUT_DIR" -maxdepth 0 -not -user $(id -u))" ]]; then
+    rm -rf "${OUTPUT_DIR:?}/"*
+fi
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -40,7 +44,7 @@ sleep 1
 WINE_PREFIX="${FLASHPOINT_DIR}/FPSoftware/${WINE_PREFIX_PATH:-Wine}"
 export WINEPREFIX="${WINE_PREFIX}"
 log "Wine prefix: ${WINEPREFIX}"
-if [[ -d "${WINE_PREFIX}" ]]; then
+if [[ -d "${WINE_PREFIX}" ]] && [[ "$(id -u)" -eq 0 ]]; then
     chown -R root:root "${WINE_PREFIX}"
 fi
 
