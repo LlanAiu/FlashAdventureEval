@@ -1,158 +1,79 @@
-import os
-import json
-import re
-import time
+"""
+Orchestrator for the vllm_cua GUI agent.
 
-from openai import OpenAI
+Per-step loop:
+    1. **Screenshot**  — capture (cropped to game window)
+    2. **Memory**      — update clues & episodic memory (Qwen)
+    3. **Plan**        — decide next action (Qwen)
+    4. **Ground**      — resolve description → pixel coordinates (UGround)
+    5. **Execute**     — dispatch via LocalDesktopComputer
+
+The return value includes a ``<RESPO>``-tagged summary in ``messages`` for
+backward compatibility with ``SeekerBot`` / ``SolverBot`` in ``moduler.py``.
+"""
+
+import asyncio
+import json
+import os
+import time
+from typing import Optional
+
 from dotenv import load_dotenv
 
+from tools import load_config, load_action_prompt, load_planner_prompt
 from ..gpt_cua.computers.computer_use import LocalDesktopComputer
-
-SYSTEM_PROMPT_DEFAULT = """You are an autonomous GUI agent that controls a desktop environment.
-You will be shown a screenshot and given a task.
-
-Return EXACTLY ONE action as a JSON object. Valid action types:
-
-- {"action": "click", "x": 100, "y": 200}
-- {"action": "double_click", "x": 100, "y": 200}
-- {"action": "type", "text": "hello world"}
-- {"action": "keypress", "keys": ["enter"]}
-- {"action": "scroll", "x": 100, "y": 200, "scroll_x": 0, "scroll_y": -5}
-- {"action": "move", "x": 100, "y": 200}
-- {"action": "drag", "path": [{"x": 10, "y": 10}, {"x": 50, "y": 50}]}
-- {"action": "wait", "ms": 1000}
-
-Rules:
-- Always look at the screenshot carefully to determine coordinates.
-- Return ONLY valid JSON, no explanation or markdown.
-- One action per call. The system will execute it and give you a new screenshot.
-- Wait at least 500ms after each action to let the screen update."""
-
-ACTION_FIELDS = {
-    "click":        ("x", "y"),
-    "double_click": ("x", "y"),
-    "type":         ("text",),
-    "keypress":     ("keys",),
-    "scroll":       ("x", "y", "scroll_x", "scroll_y"),
-    "move":         ("x", "y"),
-    "drag":         ("path",),
-    "wait":         ("ms",),
-}
+from .planner import plan
+from .grounder import ground
+from .memory import update_memory
 
 
-def extract_json(text: str) -> dict | list | None:
-    """Extract a JSON object/array from model output, handling <RESPO> tags and markdown fences."""
-    text = text.strip()
-    
-    respo_match = re.search(r"<RESPO>\s*([\s\S]*?)\s*</RESPO>", text)
-    if respo_match:
-        text = respo_match.group(1).strip()
-    
-    if "```" in text:
-        text = re.sub(r"```(?:json)?\s*", "", text).rstrip("`").strip()
-    
-    match = re.search(r"\{[\s\S]*\}|\[[\s\S]*\]", text)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-    return None
-
-
-def execute_action(action: dict, computer: LocalDesktopComputer) -> None:
-    """Dispatch a parsed action dict to the computer."""
-    action_type = action.get("action")
-    if action_type not in ACTION_FIELDS:
-        print(f"  [WARN] Unknown action type: {action_type}")
-        return
-
-    expected = ACTION_FIELDS[action_type]
-    kwargs = {k: action.get(k) for k in expected if k in action}
-
-    # Validate required fields are present and not the wrong type (e.g. list instead of int)
-    for field in expected:
-        if field not in kwargs:
-            print(f"  [WARN] Action '{action_type}' missing required field '{field}'. Skipping.")
-            return
-        # Reject lists/None — model sometimes outputs "x": [200, 200] or null
-        if isinstance(kwargs[field], (list, dict)) or kwargs[field] is None:
-            print(f"  [WARN] Action '{action_type}' field '{field}' has invalid value {kwargs[field]}. Skipping.")
-            return
-
-    # Provide defaults
-    if action_type == "click" and "button" not in kwargs:
-        kwargs["button"] = "left"
-    if action_type == "scroll":
-        kwargs.setdefault("scroll_x", 0)
-        kwargs.setdefault("scroll_y", 0)
-    if action_type == "wait":
-        kwargs.setdefault("ms", 1000)
-
-    print(f"  [ACTION] {action_type}({kwargs})")
-    method = getattr(computer, action_type, None)
-    if method is None:
-        print(f"  [WARN] Computer has no method '{action_type}'")
-        return
-    try:
-        method(**kwargs)
-    except TypeError as e:
-        print(f"  [WARN] Action '{action_type}' execution failed: {e}. Skipping.")
+ACTION_TYPES_NEEDS_GROUNDING = {"click", "double_click", "scroll"}
 
 
 def main_vllm_cua(
     user_prompt: str,
-    system_prompt: str | None = None,
+    system_prompt: Optional[str] = None,
     max_actions: int = 30,
-    model: str | None = None,
+    model: Optional[str] = None,
     game_name: str = "unknown",
     reasoning_model: str = "unknown",
+    type: Optional[str] = None,
 ) -> dict:
     """
-    Run a vllm-powered GUI agent loop.
+    Run the vllm-powered GUI agent loop.
 
-    Parameters
-    ----------
-    user_prompt : str
-        The task description for the agent.
-    system_prompt : str | None
-        Optional system instructions (used directly when provided,
-        otherwise falls back to ``SYSTEM_PROMPT_DEFAULT``).
-    max_actions : int
-        Maximum number of actions before the loop exits.
-    model : str | None
-        Model name to pass to vllm. Falls back to ``VLLM_GUI_MODEL`` env var,
-        then ``VLLM_MODEL``, then ``"Qwen/Qwen3.6-27B"``.
+    Signature mirrors the original so that ``execute.py`` needs no changes.
 
     Returns
     -------
     dict
-        ``{"messages": [...], "action_count": int}``
+        ``{"messages": [...], "action_count": int, "clues": [...],
+           "episodic": [...], "extras": {...}}``
     """
+    return asyncio.run(
+        _run_loop(
+            system_prompt=system_prompt,
+            max_actions=max_actions,
+            model=model,
+            game_name=game_name,
+            moduler=type or "clue_seeker",
+        )
+    )
+
+async def _run_loop(
+    system_prompt: Optional[str],
+    max_actions: int,
+    model: Optional[str],
+    game_name: str,
+    moduler: str,
+) -> dict:
+    """Core async loop: screenshot → memory → plan → ground → execute."""
     load_dotenv()
 
-    # ── Client setup ────────────────────────────────────────────────
-    client = OpenAI(
-        base_url=os.getenv("VLLM_BASE_URL", "http://127.0.0.1:11235/v1"),
-        api_key="vllm",
-    )
-    model = (
-        model
-        or os.getenv("VLLM_GUI_MODEL")
-        or os.getenv("VLLM_MODEL")
-        or "Qwen/Qwen3.6-27B"
-    )
+    model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
+    action_prompt = _load_action_prompt(moduler)
+    planner_prompt = _load_planner_prompt(moduler)
 
-    # ── Build system prompt ─────────────────────────────────────────
-    # Always include the default action-instruction system prompt.
-    # If the caller provides additional system context (game instructions),
-    # prepend it so the model knows both the game rules and action format.
-    if system_prompt:
-        full_system = f"{system_prompt}\n\n{SYSTEM_PROMPT_DEFAULT}"
-    else:
-        full_system = SYSTEM_PROMPT_DEFAULT
-
-    # ── Computer ────────────────────────────────────────────────────
     computer = LocalDesktopComputer(
         max_actions=max_actions,
         game_name=game_name,
@@ -160,93 +81,265 @@ def main_vllm_cua(
         reasoning_model=model,
     )
 
-    print(f"\n{'='*50}")
-    print(f"  vllm GUI Agent  |  model={model}  |  max_actions={max_actions}")
-    print(f"{'='*50}\n")
-
+    all_clues: list[dict] = []
+    all_episodic: list[dict] = []
+    merged_extras: dict = {}
     message_history: list[str] = []
+
+    print(f"\n{'='*60}")
+    print(f"  vllm GUI Agent  |  model={model}  |  max_actions={max_actions}")
+    print(f"  moduler={moduler}  |  game={game_name}")
+    print(f"{'='*60}\n")
+
     consecutive_failures = 0
-    max_consecutive_failures = 5  # break after 5 bad retries
+    max_consecutive_failures = 5
+
+    last_screenshot: Optional[str] = None
+    last_action: Optional[dict] = None
 
     for step in range(1, max_actions + 1):
+        print(f"[Step {step}/{max_actions}] Capturing screenshot...")
         screenshot = computer.screenshot()
+        img_w, img_h = _get_image_dims(computer)
 
-        # Tell the model the actual screenshot dimensions so it stays within bounds
-        dim_text = ""
-        if computer._auto_crop and computer._crop_offset:
-            cw, ch = computer._crop_offset[2], computer._crop_offset[3]
-            dim_text = (f"\n\n[NOTE: Screenshot is cropped to the game window "
-                        f"({cw}x{ch}). Top-left of the image is (0,0). "
-                        f"All coordinates must be: 0 <= x <= {cw}, 0 <= y <= {ch}]")
-        elif computer._dimensions:
-            dw, dh = computer._dimensions
-            dim_text = f"\n\n[NOTE: Screenshot dimensions are {dw}x{dh}]"
-
-        print(f"[Step {step}/{max_actions}] Asking model...")
+        print(f"[Step {step}] Updating memory...")
         try:
-            resp = client.chat.completions.create(
+            new_clues, new_episodic, extras = await update_memory(
+                screenshot_base64=screenshot,
+                action_prompt=action_prompt,
+                existing_clues=all_clues,
+                existing_episodic=all_episodic,
+                system_prompt=system_prompt,
                 model=model,
-                messages=[
-                    {"role": "system", "content": full_system},
-                    {"role": "user", "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{screenshot}"
-                            },
-                        },
-                        {"type": "text", "text": user_prompt + dim_text},
-                    ]},
-                ],
-                temperature=0,
-                max_tokens=int(os.getenv("VLLM_MAX_TOKENS", "4096")),
-                extra_body={
-                    "max_reasoning_tokens": int(os.getenv("VLLM_MAX_REASONING_TOKENS", "2048")),
-                },
+                skip_system_prompt=moduler == "problem_solver",
+            )
+            all_clues, all_episodic, merged_extras = _accumulate_state(
+                all_clues, all_episodic, merged_extras,
+                new_clues, new_episodic, extras,
             )
         except Exception as e:
-            print(f"[ERROR] API call failed: {e}")
-            break
+            print(f"[Main] Memory update failed (step {step}): {e}")
 
-        choice = resp.choices[0].message
-        finish = resp.choices[0].finish_reason
+        print(f"[Step {step}] Planning action...")
+        planner_images, planner_user_prompt = _build_planner_context(
+            last_screenshot, last_action, screenshot, planner_prompt
+        )
 
-        raw = (choice.content or choice.reasoning or "").strip()
-        message_history.append(raw)
-
-        if finish == "length":
-            print(f"  [WARN] Response truncated (hit max_tokens). Consider increasing max_tokens.")
-            consecutive_failures += 1
-
-        print(f"  [RAW] {raw}...")
-
-        parsed = extract_json(raw)
-        if parsed is None:
-            consecutive_failures += 1
-            print(f"  [WARN] Could not parse JSON ({consecutive_failures}/{max_consecutive_failures} failures). Retrying...")
-            if consecutive_failures >= max_consecutive_failures:
-                print(f"  [ERROR] Hit {max_consecutive_failures} consecutive parse failures. Exiting loop.")
+        try:
+            action = await plan(
+                screenshot_base64=planner_images,
+                user_prompt=planner_user_prompt,
+                system_prompt=system_prompt,
+                model=model,
+            )
+        except Exception as e:
+            print(f"[Main] Planning failed (step {step}): {e}")
+            if _check_failures(consecutive_failures := consecutive_failures + 1,
+                               max_consecutive_failures):
                 break
-            time.sleep(1)
             continue
-        consecutive_failures = 0  # reset on success
 
-        # Execute GUI action if present
-        # The model may output: {"action": ...} or {"next_action": {"action": ...}}
-        gui_action = None
-        if isinstance(parsed, dict):
-            if "action" in parsed and "x" in parsed:
-                gui_action = parsed
-            elif "next_action" in parsed:
-                gui_action = parsed["next_action"]
+        if action.get("type") == "noop":
+            print(f"[Main] Planner returned noop. Retrying...")
+            if _check_failures(consecutive_failures := consecutive_failures + 1,
+                               max_consecutive_failures):
+                break
+            continue
 
-        if gui_action:
-            execute_action(gui_action, computer)
+        consecutive_failures = 0
 
+        last_screenshot = screenshot
+        last_action = action
+
+        x, y = await _maybe_ground(action, screenshot, img_w, img_h)
+        if (x, y) is None:
+            if _check_failures(consecutive_failures := consecutive_failures + 1,
+                               max_consecutive_failures):
+                break
+            continue
+
+        action_type = action.get("type", "wait")
+        print(f"[Main] Executing: {action_type} (x={x}, y={y})")
+        _execute_action(action, computer, x=x, y=y)
+        message_history.append(json.dumps(action))
         time.sleep(0.5)
 
+    message_history.append(_build_summary(all_clues, all_episodic, merged_extras))
+
     print(f"\n[Done] Performed {computer.action_count} action(s).")
+    print(f"  Clues found: {len(all_clues)}")
+    print(f"  Episodic entries: {len(all_episodic)}")
+
     return {
         "messages": message_history,
         "action_count": computer.action_count,
+        "clues": all_clues,
+        "episodic": all_episodic,
+        "extras": merged_extras,
     }
+
+def _build_planner_context(
+    last_screenshot: Optional[str],
+    last_action: Optional[dict],
+    screenshot: str,
+    planner_prompt: str,
+) -> tuple[list[str], str]:
+    """
+    Build the image list and user prompt for the planner stage.
+
+    On step 1 (no prior action) returns a single image and the plain prompt.
+    On subsequent steps returns two images (before + after) with labeled text
+    so the model can visually compare the effect of its last action.
+
+    Returns
+    -------
+    (images, prompt) : tuple[list[str], str]
+        ``images`` is a 1- or 2-element list of base64 screenshots.
+        ``prompt`` is the fully constructed user prompt string.
+    """
+    if last_screenshot is not None and last_action is not None:
+        at = last_action.get("type", "unknown")
+        desc = last_action.get("description", last_action.get("text", ""))
+        return (
+            [last_screenshot, screenshot],
+            (
+                "[Image 1 - Before your last action]\n"
+                "[Image 2 - Current state]\n\n"
+                f"[Previous Action] {at} — {desc}\n\n"
+                "Compare the two images above and decide on the next action.\n\n"
+                f"{planner_prompt}"
+            ),
+        )
+    return [screenshot], planner_prompt
+
+
+def _get_image_dims(computer: LocalDesktopComputer) -> tuple[int, int]:
+    """Return the screenshot dimensions (cropped or full-screen)."""
+    if computer._auto_crop and computer._crop_offset:
+        return computer._crop_offset[2], computer._crop_offset[3]
+    return computer._dimensions[0], computer._dimensions[1]
+
+
+async def _maybe_ground(
+    action: dict,
+    screenshot: str,
+    img_w: int,
+    img_h: int,
+) -> tuple[int, int] | None:
+    """
+    Ground the action if it requires coordinates.
+
+    Returns ``(x, y)`` on success, ``(0, 0)`` for non-grounding actions,
+    or ``None`` on failure (caller should retry/break).
+    """
+    action_type = action.get("type", "wait")
+
+    if action_type not in ACTION_TYPES_NEEDS_GROUNDING:
+        return 0, 0
+
+    description = action.get("description", "")
+    if not description:
+        print(f"[Main] Action '{action_type}' missing description. Skipping.")
+        return None
+
+    print(f"[Grounding] {description}")
+    try:
+        return await ground(
+            screenshot_base64=screenshot,
+            description=description,
+            image_width=img_w,
+            image_height=img_h,
+        )
+    except Exception as e:
+        print(f"[Main] Grounding failed: {e}")
+        return None
+
+
+def _accumulate_state(
+    clues: list[dict],
+    episodic: list[dict],
+    extras: dict,
+    new_clues: list[dict],
+    new_episodic: list[dict],
+    new_extras: dict,
+) -> tuple[list[dict], list[dict], dict]:
+    """Deduplicate and merge new results into accumulated state."""
+    for clue in new_clues:
+        if clue not in clues:
+            clues.append(clue)
+    for mem in new_episodic:
+        if mem not in episodic:
+            episodic.append(mem)
+
+    if new_extras:
+        for key, val in new_extras.items():
+            if key not in extras:
+                extras[key] = val
+            elif isinstance(extras[key], list) and isinstance(val, list):
+                extras[key].extend(val)
+            else:
+                extras[key] = val
+
+    return clues, episodic, extras
+
+
+def _check_failures(count: int, max_failures: int) -> bool:
+    """Log and return True if max consecutive failures reached."""
+    if count >= max_failures:
+        print(f"[Main] Hit {max_failures} consecutive failures. Exiting.")
+        return True
+    return False
+
+
+def _build_summary(
+    clues: list[dict],
+    episodic: list[dict],
+    extras: dict,
+) -> str:
+    """Build the final ``<RESPO>``-tagged JSON summary for moduler.py compat."""
+    summary = {
+        "clues": clues,
+        "episodic_memory": episodic,
+    }
+    summary.update(extras)
+    return f"<RESPO>\n{json.dumps(summary, indent=2, ensure_ascii=False)}\n</RESPO>"
+
+
+def _execute_action(action: dict, computer: LocalDesktopComputer, x: int = 0, y: int = 0) -> None:
+    """Dispatch a parsed action dict to the computer."""
+    action_type = action.get("type", "wait")
+
+    try:
+        if action_type == "click":
+            computer.click(x, y, button=action.get("button", "left"))
+        elif action_type == "double_click":
+            computer.double_click(x, y)
+        elif action_type == "scroll":
+            computer.scroll(x, y,
+                            scroll_x=action.get("scroll_x", 0),
+                            scroll_y=action.get("scroll_y", -5))
+        elif action_type == "type":
+            computer.type(action.get("text", ""))
+        elif action_type == "keypress":
+            computer.keypress(action.get("keys", ["enter"]))
+        elif action_type == "wait":
+            computer.wait(action.get("ms", 1000))
+        elif action_type == "move":
+            computer.move(x, y)
+        elif action_type == "noop":
+            pass
+        else:
+            print(f"[Main] Unknown action type: {action_type}")
+    except Exception as e:
+        print(f"[Main] Action execution failed ({action_type}): {e}")
+
+def _load_action_prompt(moduler: str = "clue_seeker") -> str:
+    """Load the action prompt template via the shared tools loader."""
+    config = load_config("config.yaml")
+    return load_action_prompt(config.get("action_prompt_path"), moduler)
+
+
+def _load_planner_prompt(moduler: str = "clue_seeker") -> str:
+    """Load the planner prompt template via the shared tools loader."""
+    config = load_config("config.yaml")
+    return load_planner_prompt(config.get("action_prompt_path"), moduler)

@@ -110,8 +110,12 @@ def gemini_completion(system_prompt, model_name, base64_images, prompt):
         return None
 
 def vllm_completion(system_prompt, model_name, base64_images, prompt):
+    base_url = os.getenv("VLLM_BASE_URL", "http://127.0.0.1:9072/v1")
+    max_tokens = int(os.getenv("VLLM_MAX_TOKENS", "4096"))
+    max_reasoning_tokens = int(os.getenv("VLLM_MAX_REASONING_TOKENS", "2048"))
+    
     client = OpenAI(
-        base_url=os.getenv("VLLM_BASE_URL"),
+        base_url=base_url,
         api_key="vllm"
     )
     
@@ -126,24 +130,19 @@ def vllm_completion(system_prompt, model_name, base64_images, prompt):
     
     messages[1]["content"].append({"type": "text", "text": prompt})
     
-    try:
-        if model_name == "Qwen/Qwen3.6-27B":
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                max_completion_tokens=3000,
-            )
-        else:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=0,
-                max_tokens=1024,
-            )
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        temperature=0,
+        max_tokens=max_tokens,
+        extra_body={
+            "max_reasoning_tokens": max_reasoning_tokens
+        }
+    )
             
-        return response.choices[0].message.content
+    raw = response.choices[0].message.content
     
-    except Exception as e:
-        print(f"Error: {e}")
-        return None
+    if raw == None:
+        print(f"Raw VLLM output was None. Received response: {response}")
     
+    return raw

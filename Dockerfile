@@ -37,6 +37,11 @@ RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-in
     libfontconfig1 libfreetype6 libgcrypt20 libglib2.0-0 libgraphite2-3 \
     libharfbuzz0b liblz4-1 libmd0 libmount1 libpcre2-16-0 libpcre2-8-0 \
     libpng16-16 libselinux1 libsystemd0 libuuid1 libzstd1 \
+    # Chromium dependencies (needed by startChrome.sh for HTML5/WebGL games)
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libasound2 \
+    libatspi2.0-0 libgbm1 libpango-1.0-0 libcairo2 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxi6 libxrender1 \
+    libkrb5-3 libgssapi-krb5-2 libavahi-client3 libavahi-common3 \
     # Build tools needed by some Python packages \
     gcc \
     g++ \

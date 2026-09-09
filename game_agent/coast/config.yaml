@@ -1,6 +1,7 @@
 # If even one action succeeds, stop the entire tree traversal and restart from the root task
 RESET_ON_SUCCESS: true
-max_action_count: 1000
+max_action_count: 30
+max_iter: 1   # Maximum number of coast agent cycles
 
 # Prompt path
 
@@ -15,7 +16,7 @@ game_prompt_path: "./json/game_prompt.json"
 # gui_model: "gpt_operator"  # or gpt_operator / claude_cua / uground
 
 api_provider: "vllm"
-reasoning_model: "Qwen/Qwen3.6-27B"
+reasoning_model: "Qwen3.6-27B"
 gui_model: "vllm_cua"  # or gpt_operator / claude_cua / uground / vllm_cua
 
 # # Tree expansion settings
@@ -28,7 +29,6 @@ grounding_height: 768
 
 # Other options (optional)
 timeout: 30       # API timeout in seconds
-max_steps: 100    # Maximum number of execution steps
 
 
 ### Clue_Solver Max Action:
