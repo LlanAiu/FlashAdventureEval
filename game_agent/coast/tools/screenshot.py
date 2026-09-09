@@ -3,36 +3,32 @@ import subprocess
 import mss
 
 
-def _get_flash_window_bounds():
-    """Get the Flash window's position and size via xdotool.
+def _get_game_window_bounds():
+    """Get a game window's position and size via xdotool.
+    Searches for Flash, WebGL, or Chromium windows (mimics entrypoint.sh logic).
     Returns (x, y, width, height) or None."""
-    try:
-        result = subprocess.run(
-            ["xdotool", "search", "--name", "Flash", "getwindowgeometry", "--shell", "%1"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode != 0:
-            window_search = subprocess.run(
-                ["xdotool", "search", "--name", "Flash"],
+    for pattern in ("Flash", "WebGL", "Chromium"):
+        try:
+            search = subprocess.run(
+                ["xdotool", "search", "--name", pattern],
                 capture_output=True, text=True, timeout=5
             )
-            if window_search.returncode != 0 or not window_search.stdout.strip():
-                return None
-            win_id = window_search.stdout.strip().split("\n")[0]
-            result = subprocess.run(
-                ["xdotool", "getwindowgeometry", "--shell", win_id],
-                capture_output=True, text=True, timeout=5
-            )
-        if result.returncode == 0:
-            vals = {}
-            for line in result.stdout.strip().split("\n"):
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    vals[k.strip()] = int(v.strip())
-            return (vals.get("X", 0), vals.get("Y", 0),
-                    vals.get("WIDTH", 0), vals.get("HEIGHT", 0))
-    except Exception:
-        pass
+            if search.returncode == 0 and search.stdout.strip():
+                win_id = search.stdout.strip().split("\n")[0]
+                result = subprocess.run(
+                    ["xdotool", "getwindowgeometry", "--shell", win_id],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    vals = {}
+                    for line in result.stdout.strip().split("\n"):
+                        if "=" in line:
+                            k, v = line.split("=", 1)
+                            vals[k.strip()] = int(v.strip())
+                    return (vals.get("X", 0), vals.get("Y", 0),
+                            vals.get("WIDTH", 0), vals.get("HEIGHT", 0))
+        except Exception:
+            pass
     return None
 
 
@@ -85,7 +81,7 @@ def capture_flash_screenshot(game_name, gui_model, reasoning_model, time=None):
         screenshot = sct.grab(monitor)
         img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
 
-    crop = _get_flash_window_bounds()
+    crop = _get_game_window_bounds()
     if crop:
         x, y, w, h = crop
         img = img.crop((x, y, x + w, y + h))
