@@ -85,7 +85,7 @@ case "$1" in
 
         mkdir -p "${OUTPUT_DIR}"
 
-         docker run --rm ${ATTACH} \
+         docker run --rm --user "$(id -u):$(id -g)" ${ATTACH} \
             -e DISPLAY_NUM="${DISPLAY_NUM}" \
             -e GAME_NAME="${GAME_NAME}" \
             -e GAME_UUID="${GAME_UUID}" \

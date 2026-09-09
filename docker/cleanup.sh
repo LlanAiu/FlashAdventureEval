@@ -45,5 +45,6 @@ INNER_ARGS+=("${ARGS[@]+"${ARGS[@]}"}")
 docker run --rm \
     -v "${SCRIPT_DIR}/cleanup_inner.sh:/tmp/cleanup_inner.sh:ro" \
     -v "${PROJECT_DIR}/game_agent:/app/game_agent" \
+    -v "${PROJECT_DIR}/output:/app/output" \
     ubuntu:22.04 \
     "${INNER_ARGS[@]}"
