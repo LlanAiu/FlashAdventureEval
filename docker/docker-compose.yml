@@ -54,11 +54,10 @@ services:
       GPUS: "${VLLM_GPUS:-0}"
       MODEL_ID: "${VLLM_MODEL_ID:-Qwen/Qwen3.6-27B}"
       SERVED_NAME: "${VLLM_SERVED_NAME:-Qwen3.6-27B}"
-      MODEL_ALIAS: "${VLLM_MODEL_ID:-QuantTrio/Qwen3.6-27B-AWQ}"
       TP: "${VLLM_TP:-2}"
       MAX_MODEL_LEN: "${VLLM_MAX_MODEL_LEN:-128000}"
       GPU_MEM: "${VLLM_GPU_MEM:-0.65}"
-      QUANT_FLAG: "${VLLM_QUANT_FLAG:-}"
+      W_QUANT: "${VLLM_W_QUANT:-}"
       KV_QUANT: "${VLLM_KV_QUANT:-fp8}"
 
   uground:
@@ -66,13 +65,12 @@ services:
     environment:
       <<: *vllm-env
       GPUS: "${UGROUND_GPUS:-1}"
-      MODEL_ID: "${UGROUND_MODEL_ID:-UGround/UGround-V1-7B}"
+      MODEL_ID: "${UGROUND_MODEL_ID:-osunlp/UGround-V1-7B}"
       SERVED_NAME: "${UGROUND_SERVED_NAME:-UGround-V1-7B}"
-      MODEL_ALIAS: "${UGROUND_MODEL_ID:-UGround/UGround-V1-7B}"
       TP: "${UGROUND_TP:-2}"
       MAX_MODEL_LEN: "${UGROUND_MAX_MODEL_LEN:-8192}"
       GPU_MEM: "${UGROUND_GPU_MEM:-0.25}"
-      QUANT_FLAG: "${UGROUND_QUANT_FLAG:-}"
+      W_QUANT: "${UGROUND_W_QUANT:-}"
       KV_QUANT: "${UGROUND_KV_QUANT:-}"
 
   game-agent:
