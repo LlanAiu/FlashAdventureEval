@@ -36,4 +36,8 @@ CUDA_VISIBLE_DEVICES="$GPUS" exec vllm serve \
     --gpu-memory-utilization "$GPU_MEM" \
     --host 0.0.0.0 --port 8000 \
     --enable-prefix-caching \
-    --enable-chunked-prefill
+    --enable-chunked-prefill \
+    --max-num-batched-tokens 8192 \
+    --max-num-seqs 32 \
+    --enable-auto-tool-choice \
+    --tool-call-parser "hermes" \
