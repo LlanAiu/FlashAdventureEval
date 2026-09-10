@@ -56,6 +56,25 @@ if [[ -d "${WINE_PREFIX}" ]]; then
     chown -R "${CURRENT_UID}:${CURRENT_GID}" "${WINE_PREFIX}"
 fi
 
+# ── Step 1.7: Chromium profile isolation ────────────────────────────
+# Each container gets its own Chromium profile under /tmp.
+# The profile is ephemeral (no meaningful state for headless game play).
+# This prevents lock-file contention when multiple containers run HTML5
+# games against the same bind-mounted Flashpoint directory.
+CHROMIUM_PROFILE="/tmp/chromium-profile-${GAME_NAME}-${RUN_ID}"
+mkdir -p "$CHROMIUM_PROFILE"
+export CHROMIUM_PROFILE
+log "Chromium profile: ${CHROMIUM_PROFILE}"
+
+# Safety net: clean stale Lock file in the default profile.
+# Old docker/run.sh runs can leave this behind on the shared mount,
+# causing Chromium to refuse to start for subsequent runs.
+DEFAULT_PROFILE="${FLASHPOINT_DIR}/FPSoftware/Chromium/user_data/Default"
+if [[ -f "${DEFAULT_PROFILE}/Lock" ]]; then
+    rm -f "${DEFAULT_PROFILE}/Lock"
+    log "Cleaned stale Chromium Lock file in default profile"
+fi
+
 # ── Step 2: Launch game via clifp-c ─────────────────────────────────
 log "Launching '${GAME_NAME}' via clifp-c..."
 
