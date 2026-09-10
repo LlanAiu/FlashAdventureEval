@@ -59,6 +59,7 @@ services:
       GPU_MEM: "${VLLM_GPU_MEM:-0.65}"
       W_QUANT: "${VLLM_W_QUANT:-}"
       KV_QUANT: "${VLLM_KV_QUANT:-fp8}"
+      MODEL_TOOL_PARSER: "${VLLM_TOOL_PARSER:-}"
 
   uground:
     <<: *vllm-base
@@ -72,6 +73,7 @@ services:
       GPU_MEM: "${UGROUND_GPU_MEM:-0.25}"
       W_QUANT: "${UGROUND_W_QUANT:-}"
       KV_QUANT: "${UGROUND_KV_QUANT:-}"
+      MODEL_TOOL_PARSER: "${UGROUND_TOOL_PARSER:-}"
 
   game-agent:
     build:
