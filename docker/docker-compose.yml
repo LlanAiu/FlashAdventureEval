@@ -106,7 +106,7 @@ services:
       - "../output:/output"
       - "../game_agent:/app/game_agent"
       - "../evaluator:/app/evaluator"
-      - "../.env:/app/.env:ro"
+      - "../.env.docker:/app/.env:ro"
     tmpfs: [/dev/shm]
     mem_limit: "${AGENT_MEMORY:-8g}"
     networks: [flash-net]

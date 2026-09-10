@@ -24,7 +24,7 @@ export HOST_UID="$(id -u)"
 export HOST_GID="$(id -g)"
 
 # ── Compose command ──────────────────────────────────────────────────
-COMPOSE=(docker compose -f docker/docker-compose.yml --env-file .env)
+COMPOSE=(docker compose -f docker/docker-compose.yml --env-file .env.docker)
 BUILD_FLAG=(--build)
 
 if [[ "${DEV:-}" == "1" ]]; then
