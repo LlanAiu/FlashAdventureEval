@@ -77,6 +77,8 @@ def load_game_prompt(json_path, game_name, type):
         
         if type in ("game_prompt", "system_prompt"):
             return g[type]
+        elif type == "caveat":
+            return g.get("caveat", "")
         else:
             raise ValueError(f"No {type} exists for game '{game_name}'.")
 

@@ -30,7 +30,10 @@ class SeekerBot(Agent):
     def make_prompt(self):
 
         if self.gui_model in ("claude_cua", "vllm_cua"):
-            self.system_prompt = f"{self.system_prompt.strip()}\n\n{self.game_prompt.strip()}\n\n"
+            system_parts = [self.system_prompt.strip(), self.game_prompt.strip()]
+            if self.caveat:
+                system_parts.append(f"[Caveat] {self.caveat.strip()}")
+            self.system_prompt = "\n\n".join(system_parts) + "\n\n"
             self.final_prompt = (
                 f"{self.action_prompt.strip()}\n\n"
                 "Do not store the same clue more than once in memory.\n\n"
@@ -38,12 +41,14 @@ class SeekerBot(Agent):
 
             )
         else:
+            caveat_text = f"\n\n[Caveat] {self.caveat.strip()}\n\n" if self.caveat else ""
             self.final_prompt = (
                 f"{self.system_prompt.strip()}\n\n"
                 f"{self.game_prompt.strip()}\n\n"
                 f"{self.action_prompt.strip()}\n\n"
                 "Do not store the same clue more than once in memory.\n\n"
                 f"[Clues]\n{json.dumps(self.clue_memory, indent=2)}\n\n"
+                f"{caveat_text}"
             )
             
         print("🥔SeekerBot:", self.final_prompt)
@@ -157,6 +162,7 @@ class SeekerBot(Agent):
     def run(self):
         self.load_prompt(option="game", type="system_prompt")
         self.load_prompt(option="game", type="game_prompt")
+        self.load_prompt(option="game", type="caveat")
         self.load_prompt(option="action")
         self.load_memory("clue")
         self.make_prompt()
@@ -220,17 +226,22 @@ class SolverBot(Agent):
 
     def make_prompt(self):
         if self.gui_model in ("claude_cua", "vllm_cua"):
-            self.system_prompt = f"{self.system_prompt.strip()}\n\n{self.game_prompt.strip()}\n\n"
+            system_parts = [self.system_prompt.strip(), self.game_prompt.strip()]
+            if self.caveat:
+                system_parts.append(f"[Caveat] {self.caveat.strip()}")
+            self.system_prompt = "\n\n".join(system_parts) + "\n\n"
             self.final_prompt = (
                 f"{self.action_prompt.strip()}\n\n"
                 f"{self.mapping if self.mapping else ''}"
             )
         else:
+            caveat_text = f"\n\n[Caveat] {self.caveat.strip()}\n\n" if self.caveat else ""
             self.final_prompt = (
                 f"{self.system_prompt.strip()}\n\n"
                 f"{self.game_prompt.strip()}\n\n"
                 f"{self.action_prompt.strip()}\n\n"
                 f"{self.mapping if self.mapping else ''}"
+                f"{caveat_text}"
             )
 
     def execute_action(self, max_actions=30):
@@ -278,6 +289,7 @@ class SolverBot(Agent):
     def run(self):
         self.load_prompt(option="game", type="system_prompt")
         self.load_prompt(option="game", type="game_prompt")
+        self.load_prompt(option="game", type="caveat")
         self.load_prompt(option="action")
         self.load_memory("success")
         self.get_mapping()
