@@ -126,7 +126,7 @@ async def _get_api_completion(model: str, system_prompt: str, prompt: str, scree
             return _extract_respo_json(raw)
         
         except Exception as e:
-            print(f"[Memory] APi call failed (attempt {attempt + 1}: {e})")
+            print(f"[Memory] API call failed (attempt {attempt + 1}: {e})")
             await asyncio.sleep(1.5)
             
     return { "clues": [], "episodic_memory": [] }
