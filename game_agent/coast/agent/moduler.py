@@ -229,6 +229,13 @@ class SolverBot(Agent):
             system_parts = [self.system_prompt.strip(), self.game_prompt.strip()]
             if self.caveat:
                 system_parts.append(f"[Caveat] {self.caveat.strip()}")
+
+            # Embed mapping context into system_prompt so the planner sees it
+            # as [Current Goal] (in addition to memory stage seeing it)
+            mapping_context = self.mapping if self.mapping else ""
+            if mapping_context:
+                system_parts.append(f"[Current Goal]\n{mapping_context.strip()}")
+
             self.system_prompt = "\n\n".join(system_parts) + "\n\n"
             self.final_prompt = (
                 f"{self.action_prompt.strip()}\n\n"

@@ -46,13 +46,26 @@ def load_action_prompt(json_path, moduler):
         raise ValueError(f"No prompt exists for game '{moduler}'.")
 
 
-def load_planner_prompt(json_path, moduler):
+def load_planner_prompt(json_path, moduler, variant=None):
     """
     Loads the planner prompt for a given module.
 
-    Falls back to action_prompt if planner_prompt is not defined,
-    ensuring backward compatibility with agents that don't have
-    a separate planner stage.
+    Parameters
+    ----------
+    json_path : str
+        Path to the action_prompt.json file.
+    moduler : str
+        Module name, e.g. "clue_seeker" or "problem_solver".
+    variant : str | None
+        Optional variant key suffix, e.g. "planner_seeker" or "planner_solver".
+        If provided, the function reads ``<variant>`` from the module entry
+        instead of ``planner_prompt``. Falls back to ``planner_prompt`` then
+        ``action_prompt`` if the variant key is missing.
+
+    Returns
+    -------
+    str
+        The resolved planner prompt text.
     """
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -61,10 +74,14 @@ def load_planner_prompt(json_path, moduler):
         raise ValueError(f"No prompts exist for module '{moduler}'.")
 
     entry = data[moduler]
+
+    if variant and variant in entry:
+        return entry[variant]
+
     if "planner_prompt" in entry:
         return entry["planner_prompt"]
-    
-    return entry.get("action_prompt", "") # For backwards compat
+
+    return entry.get("action_prompt", "")  # For backwards compat
 
 
 def load_game_prompt(json_path, game_name, type):

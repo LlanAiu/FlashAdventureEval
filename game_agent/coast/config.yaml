@@ -35,3 +35,6 @@ timeout: 30       # API timeout in seconds
 max_actions_solver: 5
 ### Clue_Seeker Max Action:
 max_actions_seeker: 15
+
+### Planner context settings
+planner_episodic_limit: 5
