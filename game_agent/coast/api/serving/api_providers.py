@@ -111,14 +111,12 @@ def gemini_completion(system_prompt, model_name, base64_images, prompt):
 
 def vllm_completion(system_prompt, model_name, base64_images, prompt):
     base_url = os.getenv("VLLM_BASE_URL", "http://127.0.0.1:9072/v1")
-    max_tokens = int(os.getenv("VLLM_MAX_TOKENS", "4096"))
-    max_reasoning_tokens = int(os.getenv("VLLM_MAX_REASONING_TOKENS", "2048"))
-    
+
     client = OpenAI(
         base_url=base_url,
         api_key="vllm"
     )
-    
+
     messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": []}]
 
     if base64_images:
@@ -127,18 +125,39 @@ def vllm_completion(system_prompt, model_name, base64_images, prompt):
                 "type": "image_url",
                 "image_url": {"url": f"data:image/png;base64,{base64_image}"},
             })
-    
+
     messages[1]["content"].append({"type": "text", "text": prompt})
-    
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=messages,
-        temperature=0,
-        max_tokens=max_tokens,
-        extra_body={
-            "max_reasoning_tokens": max_reasoning_tokens
-        }
-    )
+
+    create_kwargs: dict = {
+        "model": model_name,
+        "messages": messages,
+    }
+
+    for name, env_key, cast in (
+        ("max_tokens", "VLLM_MAX_TOKENS", int),
+        ("temperature", "VLLM_TEMP", float),
+        ("top_p", "VLLM_TOP_P", float),
+        ("presence_penalty", "VLLM_PRESENCE", float),
+    ):
+        val = os.getenv(env_key)
+        if val is not None:
+            create_kwargs[name] = cast(val)
+
+    extra_body: dict = {}
+    for name, env_key, cast in (
+        ("max_reasoning_tokens", "VLLM_MAX_REASONING_TOKENS", int),
+        ("repetition_penalty", "VLLM_REPEAT", float),
+        ("min_p", "VLLM_MIN_P", float),
+        ("top_k", "VLLM_TOP_K", int),
+    ):
+        val = os.getenv(env_key)
+        if val is not None:
+            extra_body[name] = cast(val)
+
+    if extra_body:
+        create_kwargs["extra_body"] = extra_body
+
+    response = client.chat.completions.create(**create_kwargs)
             
     raw = response.choices[0].message.content
     
