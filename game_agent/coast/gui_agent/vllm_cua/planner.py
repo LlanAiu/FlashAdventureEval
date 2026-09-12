@@ -102,6 +102,9 @@ async def plan(
     else:
         full_system = PLANNER_SYSTEM_PROMPT
 
+    if os.getenv("ENABLE_DEBUG_LOGS", "").lower() in ("true", "1"):
+        print(f"[Planner] FINAL PROMPTS:\nSYSTEM: {full_system}\nACTION: {user_prompt}")
+
     parsed = await _get_api_completion(model, full_system, user_prompt, screenshot_base64)
     if parsed is None:
         raise ValueError(f"Planner returned no parseable JSON.")

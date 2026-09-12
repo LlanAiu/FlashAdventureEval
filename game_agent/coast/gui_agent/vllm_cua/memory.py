@@ -89,6 +89,9 @@ async def update_memory(
         )
 
     prompt = "\n".join(prompt_parts)
+    
+    if os.getenv("ENABLE_DEBUG_LOGS", "").lower() in ("true", "1"):
+        print(f"MEMORY FINAL PROMPTS:\nSYSTEM: {full_system}\nACTION: {prompt}")
 
     parsed = await _get_api_completion(model, full_system, prompt, screenshot_base64)
     if parsed is None:

@@ -157,6 +157,10 @@ def vllm_completion(system_prompt, model_name, base64_images, prompt):
     if extra_body:
         create_kwargs["extra_body"] = extra_body
 
+    if os.getenv("ENABLE_DEBUG_LOGS", "").lower() in ("true", "1"):
+        print_dict = {k: v for k, v in create_kwargs.items() if k not in ("messages", "model")}
+        print(f"VLLM settings: {print_dict}")
+    
     response = client.chat.completions.create(**create_kwargs)
             
     raw = response.choices[0].message.content
