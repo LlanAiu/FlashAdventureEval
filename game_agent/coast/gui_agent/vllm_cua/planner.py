@@ -109,6 +109,9 @@ async def plan(
     if parsed is None:
         raise ValueError(f"Planner returned no parseable JSON.")
 
+    if isinstance(parsed, list):
+        return parsed[0]
+    
     return parsed
 
 
