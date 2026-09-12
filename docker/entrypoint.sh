@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # ── Configuration (override via env vars) ───────────────────────────
+RUN_ID="${RUN_ID:-default}"
 DISPLAY_NUM="${DISPLAY_NUM:-99}"
 export DISPLAY=":${DISPLAY_NUM}"
 XVFB_RESOLUTION="${XVFB_RESOLUTION:-1280x1024x24}"
@@ -18,6 +19,10 @@ if [[ -d "$OUTPUT_DIR" ]] && [[ -n "$(find "$OUTPUT_DIR" -maxdepth 0 -not -user 
 fi
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+# Log run context
+log "Run: RUN_ID=${RUN_ID}  GAME=${GAME_NAME}  DISPLAY=:${DISPLAY_NUM}"
+log "Output: ${OUTPUT_DIR}"
 
 # ── Step 1: Start Xvfb ──────────────────────────────────────────────
 log "Starting Xvfb on :${DISPLAY_NUM} at ${XVFB_RESOLUTION}..."
@@ -39,13 +44,35 @@ pkill -f "FlashpointGameServer" 2>/dev/null || true
 sleep 1
 
 # ── Step 1.6: Fix Wine prefix ownership ──────────────────────────────
-# FlashPoint's Wine prefix is owned by the host user but the container runs
-# as root. Wine refuses to use a prefix owned by a different UID.
+# FlashPoint's Wine prefix is owned by the host user but the container
+# may run as a different UID. Wine refuses to use a prefix owned by a
+# different UID, so chown to the current effective user.
 WINE_PREFIX="${FLASHPOINT_DIR}/FPSoftware/${WINE_PREFIX_PATH:-Wine}"
 export WINEPREFIX="${WINE_PREFIX}"
 log "Wine prefix: ${WINEPREFIX}"
-if [[ -d "${WINE_PREFIX}" ]] && [[ "$(id -u)" -eq 0 ]]; then
-    chown -R root:root "${WINE_PREFIX}"
+if [[ -d "${WINE_PREFIX}" ]]; then
+    CURRENT_UID=$(id -u)
+    CURRENT_GID=$(id -g)
+    chown -R "${CURRENT_UID}:${CURRENT_GID}" "${WINE_PREFIX}"
+fi
+
+# ── Step 1.7: Chromium profile isolation ────────────────────────────
+# Each container gets its own Chromium profile under /tmp.
+# The profile is ephemeral (no meaningful state for headless game play).
+# This prevents lock-file contention when multiple containers run HTML5
+# games against the same bind-mounted Flashpoint directory.
+CHROMIUM_PROFILE="/tmp/chromium-profile-${GAME_NAME}-${RUN_ID}"
+mkdir -p "$CHROMIUM_PROFILE"
+export CHROMIUM_PROFILE
+log "Chromium profile: ${CHROMIUM_PROFILE}"
+
+# Safety net: clean stale Lock file in the default profile.
+# Old docker/run.sh runs can leave this behind on the shared mount,
+# causing Chromium to refuse to start for subsequent runs.
+DEFAULT_PROFILE="${FLASHPOINT_DIR}/FPSoftware/Chromium/user_data/Default"
+if [[ -f "${DEFAULT_PROFILE}/Lock" ]]; then
+    rm -f "${DEFAULT_PROFILE}/Lock"
+    log "Cleaned stale Chromium Lock file in default profile"
 fi
 
 # ── Step 2: Launch game via clifp-c ─────────────────────────────────

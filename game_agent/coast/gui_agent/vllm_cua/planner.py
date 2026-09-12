@@ -4,6 +4,10 @@ Planner stage for vllm_cua.
 Calls Qwen3.6-27B (via vLLM) to decide *what* action to take.
 Returns a structured dict describing the action type and a natural-language
 description of the target — **no coordinates** (those come from the grounder).
+
+The planner receives enriched context: known clues, recent episodic history,
+and optionally a current goal — all injected into the user prompt so the
+planner's decisions are grounded in what the rest of the system has observed.
 """
 
 import asyncio
@@ -17,10 +21,15 @@ from dotenv import load_dotenv
 from api import api_caller
 
 PLANNER_SYSTEM_PROMPT = """You are an autonomous GUI agent that controls a desktop environment.
-You will be shown one or two screenshots and given a task.
+You will be shown a screenshot and given contextual information to help you decide what to do.
 
-When two images are provided, the first is the state before your last action
-and the second is the current state. Use them to decide what to do next.
+You may be provided with:
+- [Known Clues] — a catalog of items, notes, codes, and interactables discovered so far
+- [Recent History] — a summary of your recent actions and observations
+- [Current Goal] — a specific objective to pursue (only in problem-solving mode)
+
+Use this context to make informed decisions. Do NOT repeat actions from your history
+unless there is a clear reason to. Prefer acting on known clues when a goal is given.
 
 Return EXACTLY ONE action as a JSON object. Valid action types:
 
@@ -50,27 +59,29 @@ Rules:
 - For type: include a "text" field with exactly what to type.
 - For keypress: include a "keys" list with the key names.
 - Return ONLY valid JSON, no explanation or markdown.
-- One action per call. The system will execute it and give you a new screenshot."""
-
+- One action per call. The system will execute it and give you a new screenshot.
+- Your job is action selection only — do not re-discover clues or update memory.
+"""
 
 
 async def plan(
     *,
-    screenshot_base64: str | list[str],
+    screenshot_base64: str,
     user_prompt: str,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
 ) -> dict:
     """
-    Send the screenshot(s) and task to Qwen for planning.
+    Send the screenshot and enriched prompt to Qwen for planning.
 
     Parameters
     ----------
-    screenshot_base64 : str | list[str]
-        Base64-encoded PNG screenshot(s). Two images are sent when comparing
-        the before/after state of the previous action.
+    screenshot_base64 : str
+        Base64-encoded PNG screenshot (single image).
     user_prompt : str
-        The high-level task description.
+        The fully constructed user prompt including context sections
+        ([Known Clues], [Recent History], [Current Goal]) and the
+        mode-specific planner directive.
     system_prompt : str | None
         Optional game-specific instructions (prepended to the planner prompt).
     model : str | None
@@ -83,7 +94,7 @@ async def plan(
         ``{"type": "click", "description": "the red key under the vase"}``
     """
     load_dotenv()
-    
+
     model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
 
     if system_prompt:
@@ -91,14 +102,20 @@ async def plan(
     else:
         full_system = PLANNER_SYSTEM_PROMPT
 
+    if os.getenv("ENABLE_DEBUG_LOGS", "").lower() in ("true", "1"):
+        print(f"[Planner] FINAL PROMPTS:\nSYSTEM: {full_system}\nACTION: {user_prompt}")
+
     parsed = await _get_api_completion(model, full_system, user_prompt, screenshot_base64)
     if parsed is None:
         raise ValueError(f"Planner returned no parseable JSON.")
 
+    if isinstance(parsed, list):
+        return parsed[0]
+    
     return parsed
 
 
-async def _get_api_completion(model: str, system_prompt: str, prompt: str, screenshot: str | list[str], max_retries: int = 3):
+async def _get_api_completion(model: str, system_prompt: str, prompt: str, screenshot: str, max_retries: int = 3):
 
     for attempt in range(max_retries):
         try:
@@ -109,17 +126,17 @@ async def _get_api_completion(model: str, system_prompt: str, prompt: str, scree
                 move_prompts=prompt,
                 base64_images=screenshot
             )
-            
+
             result = result.strip()
             print(f"[Plan] Model response (attempt {attempt + 1}):\n{result}")
-            
+
             return _extract_json(result)
         except Exception as e:
             print(f"[Plan] API call failed (attempt {attempt + 1}): {e}")
-            await asyncio.sleep(1.5)       
-        
+            await asyncio.sleep(1.5)
+
     return {"type": "noop", "description": "API call failed after retries"}
-            
+
 
 def _extract_json(text: str) -> dict | list | None:
     """Extract a JSON object/array from model output, handling markdown fences."""

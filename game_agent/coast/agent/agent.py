@@ -19,6 +19,7 @@ class Agent:
         self.action_prompt = None
         self.system_prompt = None
         self.game_prompt = None
+        self.caveat = None
 
         # model
         self.gui_model = self.config.get("gui_model")
@@ -116,6 +117,8 @@ class Agent:
                 self.game_prompt = load_game_prompt(self.game_prompt_path, game_name=self.game_name, type=type)
             elif type == "system_prompt":
                 self.system_prompt = load_game_prompt(self.game_prompt_path, game_name=self.game_name, type=type)
+            elif type == "caveat":
+                self.caveat = load_game_prompt(self.game_prompt_path, game_name=self.game_name, type=type)
         else:
             raise ValueError("The prompt type does not exist.")
 

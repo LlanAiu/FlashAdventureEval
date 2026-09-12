@@ -74,11 +74,16 @@ case "$1" in
             WINE_PREFIX_PATH="Wine"
         fi
 
+        # Timestamped run id so runs accumulate and sort by recency.
+        # Also ensures each run gets a unique Chromium profile under /tmp.
+        RUN_ID="${RUN_ID:-flash-$(date +%Y-%m-%d_%H-%M-%S)}"
+
         echo "Running ${IMAGE_NAME}:${IMAGE_TAG} with GAME_NAME='${GAME_NAME}'"
         if [[ -n "${GAME_UUID}" ]]; then
             echo "  Game UUID:  ${GAME_UUID}"
         fi
         echo "  Instance:   ${INSTANCE}  (display :${DISPLAY_NUM}, Wine prefix: ${WINE_PREFIX_PATH})"
+        echo "  Run ID:     ${RUN_ID}"
         echo "  FlashPoint: ${FLASHPOINT_DIR}"
         echo "  Output:     ${OUTPUT_DIR}"
         echo ""
@@ -91,6 +96,7 @@ case "$1" in
             -e GAME_UUID="${GAME_UUID}" \
             -e FLASHPOINT_DIR=/flashpoint \
             -e WINE_PREFIX_PATH="${WINE_PREFIX_PATH}" \
+            -e RUN_ID="${RUN_ID}" \
             -e OUTPUT_DIR=/output \
             -e HEADLESS=true \
             -e WINEDEBUG=-all \

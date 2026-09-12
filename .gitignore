@@ -64,6 +64,7 @@ logs/
 
 # 🔑 Secrets / Env files
 .env
+.env.*
 *.env
 **/.env
 

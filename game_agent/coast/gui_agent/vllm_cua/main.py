@@ -60,6 +60,7 @@ def main_vllm_cua(
         )
     )
 
+
 async def _run_loop(
     system_prompt: Optional[str],
     max_actions: int,
@@ -71,8 +72,10 @@ async def _run_loop(
     load_dotenv()
 
     model = model or os.getenv("VLLM_MODEL") or "Qwen3.6-27B"
+    config = load_config("config.yaml")
     action_prompt = _load_action_prompt(moduler)
     planner_prompt = _load_planner_prompt(moduler)
+    episodic_limit = config.get("planner_episodic_limit", 5)
 
     computer = LocalDesktopComputer(
         max_actions=max_actions,
@@ -89,13 +92,11 @@ async def _run_loop(
     print(f"\n{'='*60}")
     print(f"  vllm GUI Agent  |  model={model}  |  max_actions={max_actions}")
     print(f"  moduler={moduler}  |  game={game_name}")
+    print(f"  episodic_limit={episodic_limit}")
     print(f"{'='*60}\n")
 
     consecutive_failures = 0
     max_consecutive_failures = 5
-
-    last_screenshot: Optional[str] = None
-    last_action: Optional[dict] = None
 
     for step in range(1, max_actions + 1):
         print(f"[Step {step}/{max_actions}] Capturing screenshot...")
@@ -121,13 +122,16 @@ async def _run_loop(
             print(f"[Main] Memory update failed (step {step}): {e}")
 
         print(f"[Step {step}] Planning action...")
-        planner_images, planner_user_prompt = _build_planner_context(
-            last_screenshot, last_action, screenshot, planner_prompt
+        planner_user_prompt = _build_planner_context(
+            planner_prompt=planner_prompt,
+            all_clues=all_clues,
+            all_episodic=all_episodic,
+            episodic_limit=episodic_limit,
         )
 
         try:
             action = await plan(
-                screenshot_base64=planner_images,
+                screenshot_base64=screenshot,
                 user_prompt=planner_user_prompt,
                 system_prompt=system_prompt,
                 model=model,
@@ -147,9 +151,6 @@ async def _run_loop(
             continue
 
         consecutive_failures = 0
-
-        last_screenshot = screenshot
-        last_action = action
 
         x, y = await _maybe_ground(action, screenshot, img_w, img_h)
         if (x, y) is None:
@@ -178,39 +179,85 @@ async def _run_loop(
         "extras": merged_extras,
     }
 
-def _build_planner_context(
-    last_screenshot: Optional[str],
-    last_action: Optional[dict],
-    screenshot: str,
-    planner_prompt: str,
-) -> tuple[list[str], str]:
-    """
-    Build the image list and user prompt for the planner stage.
 
-    On step 1 (no prior action) returns a single image and the plain prompt.
-    On subsequent steps returns two images (before + after) with labeled text
-    so the model can visually compare the effect of its last action.
+def _format_clues_bullet(clues: list[dict]) -> str:
+    """Format clues into compact bullet-point lines for the planner prompt."""
+    if not clues:
+        return "(none yet)"
+    lines = []
+    for c in clues:
+        name = c.get("clue", c.get("name", "unknown"))
+        location = c.get("location", "")
+        usage = c.get("usage_hint", "")
+        parts = [name]
+        if location:
+            parts.append(location)
+        if usage:
+            parts.append(usage)
+        lines.append(" — ".join(parts))
+    return "\n".join(f"• {line}" for line in lines)
+
+
+def _format_episodic_bullet(episodic: list[dict]) -> str:
+    """Format episodic entries into compact bullet-point lines."""
+    if not episodic:
+        return "(none yet)"
+    lines = []
+    for e in episodic:
+        action = e.get("action", "")
+        place = e.get("place", "")
+        if action and place:
+            lines.append(f"{action} (in {place})")
+        elif action:
+            lines.append(action)
+        elif place:
+            lines.append(f"[at {place}]")
+        else:
+            lines.append(str(e))
+    return "\n".join(f"• {line}" for line in lines)
+
+
+def _build_planner_context(
+    *,
+    planner_prompt: str,
+    all_clues: list[dict],
+    all_episodic: list[dict],
+    episodic_limit: int,
+) -> str:
+    """
+    Build the enriched user prompt for the planner stage.
+
+    Uses a single image (current screenshot). The prompt includes:
+    - Image reference
+    - [Known Clues] — all accumulated clues as compact bullets
+    - [Recent History] — last N episodic entries as compact bullets
+    - [Current Goal] — for solver mode only (injected via system_prompt)
+    - Mode-specific planner directive
 
     Returns
     -------
-    (images, prompt) : tuple[list[str], str]
-        ``images`` is a 1- or 2-element list of base64 screenshots.
-        ``prompt`` is the fully constructed user prompt string.
+    str
+        The fully constructed user prompt.
     """
-    if last_screenshot is not None and last_action is not None:
-        at = last_action.get("type", "unknown")
-        desc = last_action.get("description", last_action.get("text", ""))
-        return (
-            [last_screenshot, screenshot],
-            (
-                "[Image 1 - Before your last action]\n"
-                "[Image 2 - Current state]\n\n"
-                f"[Previous Action] {at} — {desc}\n\n"
-                "Compare the two images above and decide on the next action.\n\n"
-                f"{planner_prompt}"
-            ),
-        )
-    return [screenshot], planner_prompt
+    parts = ["[Image - Current state]\n"]
+
+    # --- Known Clues ---
+    parts.append(f"[Known Clues]\n{_format_clues_bullet(all_clues)}\n")
+
+    # --- Recent History ---
+    recent_episodic = all_episodic[-episodic_limit:] if len(all_episodic) > episodic_limit else all_episodic
+    parts.append(f"[Recent History]\n{_format_episodic_bullet(recent_episodic)}\n")
+
+    # --- Current Goal (solver mode only) ---
+    # The goal/mapping context is injected into the system_prompt by SolverBot.
+    # We don't need it here for seeker mode.
+    # If the system_prompt contains mapping context, the model will see it
+    # via the full_system = f"{system_prompt}\n\n{PLANNER_SYSTEM_PROMPT}" chain.
+
+    # --- Planner directive ---
+    parts.append(planner_prompt)
+
+    return "\n".join(parts)
 
 
 def _get_image_dims(computer: LocalDesktopComputer) -> tuple[int, int]:
@@ -333,6 +380,7 @@ def _execute_action(action: dict, computer: LocalDesktopComputer, x: int = 0, y:
     except Exception as e:
         print(f"[Main] Action execution failed ({action_type}): {e}")
 
+
 def _load_action_prompt(moduler: str = "clue_seeker") -> str:
     """Load the action prompt template via the shared tools loader."""
     config = load_config("config.yaml")
@@ -340,6 +388,18 @@ def _load_action_prompt(moduler: str = "clue_seeker") -> str:
 
 
 def _load_planner_prompt(moduler: str = "clue_seeker") -> str:
-    """Load the planner prompt template via the shared tools loader."""
+    """
+    Load the mode-specific planner prompt variant.
+
+    Uses "planner_seeker" for clue_seeker modules and "planner_solver"
+    for problem_solver modules, falling back to the generic "planner_prompt".
+    """
     config = load_config("config.yaml")
-    return load_planner_prompt(config.get("action_prompt_path"), moduler)
+    variant = (
+        "planner_seeker" if moduler == "clue_seeker"
+        else "planner_solver" if moduler == "problem_solver"
+        else None
+    )
+    return load_planner_prompt(
+        config.get("action_prompt_path"), moduler, variant=variant
+    )

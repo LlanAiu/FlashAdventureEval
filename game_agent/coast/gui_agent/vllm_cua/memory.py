@@ -89,6 +89,9 @@ async def update_memory(
         )
 
     prompt = "\n".join(prompt_parts)
+    
+    if os.getenv("ENABLE_DEBUG_LOGS", "").lower() in ("true", "1"):
+        print(f"MEMORY FINAL PROMPTS:\nSYSTEM: {full_system}\nACTION: {prompt}")
 
     parsed = await _get_api_completion(model, full_system, prompt, screenshot_base64)
     if parsed is None:
@@ -126,7 +129,7 @@ async def _get_api_completion(model: str, system_prompt: str, prompt: str, scree
             return _extract_respo_json(raw)
         
         except Exception as e:
-            print(f"[Memory] APi call failed (attempt {attempt + 1}: {e})")
+            print(f"[Memory] API call failed (attempt {attempt + 1}: {e})")
             await asyncio.sleep(1.5)
             
     return { "clues": [], "episodic_memory": [] }

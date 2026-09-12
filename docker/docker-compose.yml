@@ -1,0 +1,128 @@
+# FlashAdventure stack — three services, one network.
+#
+#   vllm          main model server       -> http://vllm:8000/v1
+#   uground       grounding model server   -> http://uground:8000/v1
+#   game-agent    Xvfb + clifp-c + agent   (ephemeral, run --rm)
+#
+# Run it:
+#   bash docker/play_one_run.sh <game>
+#
+# Config: the root .env supplies model, GPU, and cache paths.
+
+name: flashadventure
+
+# ── vLLM service ──────────────────────────────────────────────────────
+x-vllm-base: &vllm-base
+  image: vllm/vllm-openai:latest
+  ipc: host
+  runtime: nvidia
+  # Run as the invoking host user (exported by play_one_run.sh); 0:0 = root fallback.
+  user: "${HOST_UID:-0}:${HOST_GID:-0}"
+  volumes:
+    - "${HF_CACHE:-/tmp/hf}:/hf"
+    - "./vllm-entrypoint.sh:/vllm-entrypoint.sh:ro"
+  networks: [flash-net]
+  restart: unless-stopped
+  entrypoint: ["/vllm-entrypoint.sh"]
+  healthcheck:
+    test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+    interval: 30s
+    timeout: 10s
+    retries: 40
+    start_period: 600s
+
+# Cache/identity env every vLLM container needs when running as an arbitrary host uid.
+x-vllm-env: &vllm-env
+  # torch inductor calls getpass.getuser() at import; a host LDAP uid has no passwd
+  # entry in the image, so hand it a username (getpass reads LOGNAME/USER first).
+  USER: "${USER:-app}"
+  LOGNAME: "${USER:-app}"
+  # Non-root needs writable cache homes. Weights at /hf; compile caches in /tmp.
+  HOME: /tmp
+  HF_HOME: /hf
+  XDG_CACHE_HOME: /tmp/.cache
+  VLLM_CACHE_ROOT: /tmp/.cache/vllm
+  TRITON_CACHE_DIR: /tmp/.triton
+  TORCHINDUCTOR_CACHE_DIR: /tmp/.torchinductor
+  OUTLINES_CACHE_DIR: /tmp/.outlines
+
+services:
+  vllm:
+    <<: *vllm-base
+    environment:
+      <<: *vllm-env
+      GPUS: "${VLLM_GPUS:-0}"
+      MODEL_ID: "${VLLM_MODEL_ID:-Qwen/Qwen3.6-27B}"
+      SERVED_NAME: "${VLLM_SERVED_NAME:-Qwen3.6-27B}"
+      TP: "${VLLM_TP:-2}"
+      MAX_MODEL_LEN: "${VLLM_MAX_MODEL_LEN:-128000}"
+      GPU_MEM: "${VLLM_GPU_MEM:-0.65}"
+      W_QUANT: "${VLLM_W_QUANT:-}"
+      KV_QUANT: "${VLLM_KV_QUANT:-fp8}"
+      MODEL_TOOL_PARSER: "${VLLM_TOOL_PARSER:-}"
+
+  uground:
+    <<: *vllm-base
+    environment:
+      <<: *vllm-env
+      GPUS: "${UGROUND_GPUS:-1}"
+      MODEL_ID: "${UGROUND_MODEL_ID:-osunlp/UGround-V1-7B}"
+      SERVED_NAME: "${UGROUND_SERVED_NAME:-UGround-V1-7B}"
+      TP: "${UGROUND_TP:-2}"
+      MAX_MODEL_LEN: "${UGROUND_MAX_MODEL_LEN:-8192}"
+      GPU_MEM: "${UGROUND_GPU_MEM:-0.25}"
+      W_QUANT: "${UGROUND_W_QUANT:-}"
+      KV_QUANT: "${UGROUND_KV_QUANT:-}"
+      MODEL_TOOL_PARSER: "${UGROUND_TOOL_PARSER:-}"
+
+  game-agent:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: flashadventure:latest
+    working_dir: /app
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
+    environment:
+      HOME: /tmp
+      USER: "${USER:-app}"
+      LOGNAME: "${USER:-app}"
+      DISPLAY_NUM: "${DISPLAY_NUM:-99}"
+      GAME_NAME: "${GAME_NAME:-}"
+      GAME_UUID: "${GAME_UUID:-}"
+      FLASHPOINT_DIR: /flashpoint
+      WINE_PREFIX_PATH: "${WINE_PREFIX_PATH:-Wine}"
+      OUTPUT_DIR: "/output/${GAME_NAME:-game}/${RUN_ID:-default}"
+      VLLM_BASE_URL: http://vllm:8000/v1
+      VLLM_MODEL: "${VLLM_SERVED_NAME:-Qwen3.6-27B}"
+      HEADLESS: "true"
+      WINEDEBUG: -all
+      VLLM_GUI_MODEL: "${VLLM_GUI_MODEL:-Qwen3.6-27B}"
+      VLLM_MAX_TOKENS: "${VLLM_MAX_TOKENS:-8192}"
+      VLLM_MAX_REASONING_TOKENS: "${VLLM_MAX_REASONING_TOKENS:-4096}"
+      UGROUND_BASE_URL: http://uground:8000/v1
+      UGROUND_MODEL: "${UGROUND_SERVED_NAME:-UGround-V1-7B}"
+      DEBUG_SAVE_SCREENSHOTS: "${DEBUG_SAVE_SCREENSHOTS:-true}"
+      RUN_ID: "${RUN_ID:-default}"
+    volumes:
+      - "${FLASHPOINT_DIR:-/playpen-nas-ssd4/aliu06/Downloads/Flashpoint}:/flashpoint"
+      - "../output:/output"
+      - "../game_agent:/app/game_agent"
+      - "../evaluator:/app/evaluator"
+      - "../.env.docker:/app/.env:ro"
+    tmpfs: [/dev/shm]
+    mem_limit: "${AGENT_MEMORY:-8g}"
+    networks: [flash-net]
+    restart: "no"
+    depends_on:
+      vllm:
+        condition: service_healthy
+      uground:
+        condition: service_healthy
+
+networks:
+  flash-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.164.0/24
+          gateway: 192.168.164.1
