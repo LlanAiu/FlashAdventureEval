@@ -110,7 +110,7 @@ async def plan(
         raise ValueError(f"Planner returned no parseable JSON.")
 
     if isinstance(parsed, list):
-        return parsed[0]
+        return parsed[0] if parsed else {"type": "noop", "description": "LLM returned empty array"}
     
     return parsed
 
@@ -126,6 +126,10 @@ async def _get_api_completion(model: str, system_prompt: str, prompt: str, scree
                 move_prompts=prompt,
                 base64_images=screenshot
             )
+
+            if result is None:
+                print(f"[Plan] API returned None (attempt {attempt + 1})")
+                continue
 
             result = result.strip()
             print(f"[Plan] Model response (attempt {attempt + 1}):\n{result}")
