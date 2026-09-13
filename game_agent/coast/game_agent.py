@@ -77,8 +77,11 @@ def run_solver(config_path, game_name, failed_mappings, total_actions, max_actio
 
         print(f"\n📝 Processing mapping [{idx + 1}/{len(failed_mappings)}]")
         print("🔍 Clue:")
-        for key, value in clue.items():
-            print(f"   • {key}: {value}")
+        if isinstance(clue, dict):
+            for key, value in clue.items():
+                print(f"   • {key}: {value}")
+        else:
+            print(f"   (malformed clue: {clue})")
         print(f"🧠 Memory     : {related_memory}")
         print(f"🎯 Expected   : {expected_action}")
 
