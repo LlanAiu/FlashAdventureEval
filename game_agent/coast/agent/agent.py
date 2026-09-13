@@ -92,15 +92,27 @@ class Agent:
             merged = existing + [c for c in data if (c["clue"], c["location"]) not in seen]
 
         elif isinstance(data, list):
-            if all(isinstance(d, dict) for d in data):
-                serialized = {json.dumps(d, sort_keys=True): d for d in existing if isinstance(d, dict)}
+            if all(isinstance(d, dict) and all(not isinstance(v, dict) for v in d.values()) for d in data):
+                serialized = {json.dumps(d, sort_keys=True): d for d in existing if isinstance(d, dict) and all(not isinstance(v, dict) for v in d.values())}
                 for d in data:
                     key = json.dumps(d, sort_keys=True)
                     if key not in serialized:
                         serialized[key] = d
                 merged = list(serialized.values())
             else:
-                merged = list(dict.fromkeys(existing + data))
+                def _is_hashable(x):
+                    try:
+                        hash(x)
+                        return True
+                    except TypeError:
+                        return False
+
+                clean_existing = [x for x in existing if _is_hashable(x)]
+                clean_data = [x for x in data if _is_hashable(x)]
+                if clean_data != data:
+                    dropped = [x for x in data if not _is_hashable(x)]
+                    print(f"[WARNING] Dropped {len(dropped)} unhashable entries from {type} memory: {dropped}")
+                merged = list(dict.fromkeys(clean_existing + clean_data))
         else:
             merged = data 
 
