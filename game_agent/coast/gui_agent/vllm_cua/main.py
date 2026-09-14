@@ -25,6 +25,7 @@ from ..gpt_cua.computers.computer_use import LocalDesktopComputer
 from .planner import plan
 from .grounder import ground
 from .memory import update_memory
+from .debug_overlay import is_debug_overlay_enabled, annotate_and_overwrite
 
 
 ACTION_TYPES_NEEDS_GROUNDING = {"click", "double_click", "scroll"}
@@ -162,6 +163,17 @@ async def _run_loop(
         action_type = action.get("type", "wait")
         print(f"[Main] Executing: {action_type} (x={x}, y={y})")
         _execute_action(action, computer, x=x, y=y)
+
+        # Debug crosshair: overwrite saved screenshot with annotated version
+        if is_debug_overlay_enabled() and computer._last_screenshot_path is not None:
+            annotate_and_overwrite(
+                screenshot_base64=screenshot,
+                x=x,
+                y=y,
+                description=action.get("description", ""),
+                save_path=computer._last_screenshot_path,
+            )
+
         message_history.append(json.dumps(action))
         time.sleep(0.5)
 

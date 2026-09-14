@@ -73,6 +73,14 @@ class LocalDesktopComputer(Computer):
         # Start from next available number so new bots don't overwrite old screenshots
         self._screenshot_count = self._next_screenshot_number()
 
+        try:
+            from tools.screenshot import get_screenshot_dir
+            self._screenshot_dir = get_screenshot_dir("screenshots", self._reasoning_model, self._gui_agent, self._game_name)
+        except Exception:
+            self._screenshot_dir = os.environ.get("SCREENSHOT_DIR", "./screenshots")
+            os.makedirs(self._screenshot_dir, exist_ok=True)
+        self._last_screenshot_path: str | None = None
+
         # Crop region for game window
         self._auto_crop = auto_crop and os.environ.get("HEADLESS", "").lower() in ("1", "true", "yes")
         self._crop_offset: tuple[int, int, int, int] | None = None  # (x, y, w, h)
@@ -145,15 +153,10 @@ class LocalDesktopComputer(Computer):
 
         if os.environ.get("DEBUG_SAVE_SCREENSHOTS", "").lower() in ("1", "true", "yes"):
             self._screenshot_count += 1
-            try:
-                from tools.screenshot import get_screenshot_dir
-                directory = get_screenshot_dir("screenshots", self._reasoning_model, self._gui_agent, self._game_name)
-            except Exception:
-                # Fallback to env var or default
-                directory = os.environ.get("SCREENSHOT_DIR", "./screenshots")
-                os.makedirs(directory, exist_ok=True)
-            path = os.path.join(directory, f"flash_screenshot_{self._screenshot_count:04d}.png")
+            filename = f"flash_screenshot_{self._screenshot_count:04d}.png"
+            path = os.path.join(self._screenshot_dir, filename)
             img.save(path)
+            self._last_screenshot_path = path
             print(f"Debug screenshot saved: {path}")
 
         buffer = BytesIO()
